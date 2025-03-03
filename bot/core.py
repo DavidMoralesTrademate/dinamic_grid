@@ -50,6 +50,7 @@ class BotMain:
             try:
                 if not self.all_ok and self.price > 0:
                     await self.order_manager.place_orders(self.price)
+                    self.all_ok = True
                 
                 resp = await self.exchange.watch_bids_asks([self.symbol])
                 self.price = float((resp[self.symbol]['bid'] + resp[self.symbol]['ask']) / 2)
