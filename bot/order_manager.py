@@ -70,8 +70,6 @@ class OrderManager:
             )
             if order:
                 logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID={order['id']}")
-                # Añadimos localmente. Podría carecer de 'price' si el exchange no lo manda
-                self._add_order_local(order)
                 return order
             else:
                 logging.warning(f"No se recibió respuesta en create_order: {side.upper()} {amount} @ {price}")
