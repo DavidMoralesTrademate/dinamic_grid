@@ -47,7 +47,7 @@ class OrderManager:
                 new_order = await self.create_order(side, order['amount'], target_price)
                 
                 if new_order:
-                    self.active_orders[target_price] = (order['amount'], new_order['id'])
+                    self.active_orders[target_price] = (new_order['side'], order['amount'], new_order['id'])
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
     
@@ -69,6 +69,6 @@ class OrderManager:
             for p in prices:
                 order = await self.create_order('buy', self.amount, p)
                 if order:
-                    self.active_orders[p] = (self.amount, order['id'])
+                    self.active_orders[p] = ('buy', self.amount, order['id'])
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
