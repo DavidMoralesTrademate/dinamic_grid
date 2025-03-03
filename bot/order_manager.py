@@ -60,7 +60,7 @@ class OrderManager:
             side = order.get('side')
             price = order.get('price')
 
-            if status == 'filled' and filled == amount and amount > 0.0:
+            if status == 'filled' and filled == amount:
                 # Orden llena completamente
                 if side == 'buy':
                     self.total_buys_filled += 1
