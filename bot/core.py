@@ -62,12 +62,18 @@ class BotMain:
                 logging.info(f"Reintentando en {wait_time} segundos...")
                 await asyncio.sleep(wait_time)
     
+    async def rebalance_loop(self):
+        while True:
+            await asyncio.sleep(15)
+            await self.order_manager.rebalance()
+
     async def async_run(self):
         """Ejecución principal del bot."""
         try:
             await asyncio.gather(
                 asyncio.create_task(self.check_prices()),
                 asyncio.create_task(self.order_manager.check_orders()),
+                asyncio.create_task(self.rebalance_loop()),
             )
         except Exception as e:
             logging.error(f"Error crítico en el bot: {e}")

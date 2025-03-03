@@ -169,3 +169,8 @@ class OrderManager:
         print(f"  Sells llenas: {self.total_sells_filled}")
         print(f"  Profit estimado (spread): {self.match_profit:.4f}")
         print("=== Fin de Stats ===\n")
+
+
+
+    def rebalance(self):
+        print('rebalanceo')
