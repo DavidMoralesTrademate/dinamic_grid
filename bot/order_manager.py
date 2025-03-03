@@ -173,101 +173,165 @@ class OrderManager:
 
 
     async def rebalance(self):
-
         open_orders = await self.exchange.fetch_open_orders(self.symbol)
         net_pos = self.total_buys_filled - self.total_sells_filled
 
         buy_orders = [o for o in open_orders if o['side'] == 'buy']
         sell_orders = [o for o in open_orders if o['side'] == 'sell']
 
-        print(len(open_orders))
-        print(len(buy_orders))
-        print(len(sell_orders))
+        total_open = len(open_orders)
+        num_buys = len(buy_orders)
+        num_sells = len(sell_orders)
 
-        # rebalancear compras
-        if len(sell_orders) > len(buy_orders) + 1*1: 
-            print('necesitamos cancelar ventas y poner compras')
+        logging.info(f"[Rebalance] total_open={total_open}, buy_orders={num_buys}, sell_orders={num_sells}, net_pos={net_pos}")
 
+        # -----------------------------------------
+        # 1) Rebalancear compras (cancelar sells y crear buys)
+        # -----------------------------------------
+        # Condición: si hay más ventas que compras + 1 => "sobran sells"
+        if num_sells > num_buys * 1.1:
+            logging.info("[Rebalance] Necesitamos cancelar ventas y poner compras")
+            
+            # Ordenar sells (precio desc) para cancelar las más alejadas o las que sea tu criterio
             sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
 
-            # Decide cuántas cancelar, ej: diff = len(sell_orders) - len(buy_orders)
-            diff = (len(sell_orders) - len(buy_orders))  # o +1
+            # diff = cuántas ventas se quieren convertir en compras
+            diff = num_sells - num_buys  # o +1, según tu lógica
+            if diff <= 0:
+                logging.info("[Rebalance] diff <= 0, nada que cancelar ni crear.")
+                return
+            
+            # Evitar rebalance excesivo
+            if diff > self.num_orders // 2:
+                diff = self.num_orders // 2
+            
             sells_to_cancel = sorted_sells[:diff]
-
-            if diff > self.num_orders/2:
-                diff = math.floor(open_orders / 2)
-
-            # Cancelar esas sells
+            
+            logging.info(f"[Rebalance] Cancelaremos {diff} sell-orders y crearemos {diff} buy-orders.")
+            
+            # Cancelar sells
             for s in sells_to_cancel:
-                await self.exchange.cancel_order(s['id'], self.symbol)
+                try:
+                    await self.exchange.cancel_order(s['id'], self.symbol)
+                    logging.info(f"Cancelada venta ID={s['id']} precio={s['price']}")
+                except Exception as e:
+                    logging.error(f"Error cancel_order sell {s['id']}: {e}")
 
-            sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
+            # Crear buys basados en la compra más alta o lo que quieras. 
+            # En tu snippet, usas 'sorted_buys[0]['price']' => la compra con menor precio. 
+            # Pero si no hay buys, cuidado. 
+            if len(buy_orders) == 0:
+                logging.warning("[Rebalance] No hay buy_orders para referencia de precio. Se usará un fallback.")
+                ref_price = 0.0  # Podrías usar un mid_price
+            else:
+                sorted_buys_asc = sorted(buy_orders, key=lambda o: o['price'])  # menor a mayor
+                ref_price = sorted_buys_asc[0]['price'] * (1 - self.percentage_spread)
             
             try:
+                # Generar precios de compra usando tu 'calculate_order_prices_buy'
                 prices = calculate_order_prices_buy(
-                    sorted_buys[0]['price'] * 1-self.percentage_spread, 
-                    self.percentage_spread, 
-                    diff, 
+                    ref_price,
+                    self.percentage_spread,
+                    diff,
                     self.price_format
                 )
+
                 count = 0
                 for p in prices:
-                    if count >= self.num_orders:
+                    if count >= diff:
                         break
                     amt = format_quantity(
                         self.amount / p / self.contract_size, 
                         self.amount_format
                     )
-                    await self.create_order('buy', amt, p)
-                    count += 1
+                    try:
+                        await self.create_order('buy', amt, p)
+                        logging.info(f"Creada compra {amt} @ {p}")
+                        count += 1
+                    except Exception as e:
+                        logging.error(f"Error create_order buy @ {p}: {e}")
+                        
             except Exception as e:
-                logging.error(f"Error en place_orders: {e}")
+                logging.error(f"[Rebalance] Error en la parte de crear buys: {e}")
 
-
-        # rebalancear ventas
-        if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders):
-            print('Puede que nececite mas ventas')
-            print(f'net_pos: {net_pos} sell_orders: {len(sell_orders)}') 
+        # -----------------------------------------
+        # 2) Rebalancear ventas (cancelar buys y crear sells)
+        # -----------------------------------------
+        # Condición: si hay más compras que ventas + 1 => “sobran buys” 
+        #            y net_pos > num_sells => hay margen para colocar más ventas 
+        if num_buys > num_sells * 1.1 and net_pos > num_sells:
+            logging.info("[Rebalance] Puede que necesitemos más ventas.")
+            logging.info(f"net_pos={net_pos}, sells={num_sells}, buy_orders={num_buys}")
             
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)  # pequeña pausa
 
-            if net_pos == len(sell_orders):
-                print('nos saliumos')
+            # Double-check
+            if net_pos == num_sells:
+                logging.info("[Rebalance] net_pos == sells. No hay margen para más ventas.")
                 return
+
+            diff = (num_buys - num_sells)
+            # No queremos crear más sells de las que net_pos respalda
+            capacidad_ventas = net_pos - num_sells
+            if diff > capacidad_ventas:
+                diff = capacidad_ventas
             
-            sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
+            if diff <= 0:
+                logging.info("[Rebalance] diff <= 0, no hay nada que cancelar ni crear.")
+                return
 
-            diff = (len(buy_orders) - len(sell_orders))
-            if diff >= net_pos:
-                diff = net_pos
+            # Evitar cambios muy grandes
+            if diff > self.num_orders // 2:
+                diff = self.num_orders // 2
 
-            if diff > self.num_orders/2:
-                diff = math.floor(open_orders / 2)
-                
-            buys_to_cancel = sorted_buys[:diff]
+            # Cancelar las buys más “innecesarias”: por ej, las de precio más bajo
+            sorted_buys_asc = sorted(buy_orders, key=lambda o: o['price'])
+            buys_to_cancel = sorted_buys_asc[:diff]
 
-            # Cancelar esas buys
-            for s in buys_to_cancel:
-                await self.exchange.cancel_order(s['id'], self.symbol)
+            logging.info(f"[Rebalance] Cancelaremos {diff} buy-orders y crearemos {diff} sell-orders.")
+            
+            # Cancelar buys
+            for b in buys_to_cancel:
+                try:
+                    await self.exchange.cancel_order(b['id'], self.symbol)
+                    logging.info(f"Cancelada compra ID={b['id']} precio={b['price']}")
+                except Exception as e:
+                    logging.error(f"Error cancel_order buy {b['id']}: {e}")
 
-            sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+            # Crear sells
+            # Tomamos la venta más alta si existe, o un fallback
+            sorted_sells_desc = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+            if len(sorted_sells_desc) > 0:
+                ref_price = sorted_sells_desc[0]['price'] * (1 + self.percentage_spread)
+            else:
+                # fallback si no hay ventas
+                # podrías usar un mid_price actual del mercado
+                ref_price = 0.0
 
             try:
                 prices = calculate_order_prices_sell(
-                    sorted_sells[0]['price'] * 1+self.percentage_spread, 
-                    self.percentage_spread, 
-                    diff, 
+                    ref_price,
+                    self.percentage_spread,
+                    diff,
                     self.price_format
                 )
                 count = 0
                 for p in prices:
-                    if count >= self.num_orders:
+                    if count >= diff:
                         break
                     amt = format_quantity(
-                        (self.amount * (1-self.percentage_spread)) / p / self.contract_size, 
+                        (self.amount * (1 - self.percentage_spread)) / p / self.contract_size,
                         self.amount_format 
                     )
-                    await self.create_order('sell', amt, p)
-                    count += 1
+                    try:
+                        await self.create_order('sell', amt, p)
+                        logging.info(f"Creada venta {amt} @ {p}")
+                        count += 1
+                    except Exception as e:
+                        logging.error(f"Error create_order sell @ {p}: {e}")
+
             except Exception as e:
-                logging.error(f"Error en place_orders: {e}")
+                logging.error(f"[Rebalance] Error en la parte de crear sells: {e}")
+
+        else:
+            logging.info("[Rebalance] No hay condición para re-balancear ventas en este momento.")
