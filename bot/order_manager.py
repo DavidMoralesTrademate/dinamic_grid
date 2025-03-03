@@ -28,8 +28,6 @@ class OrderManager:
                     continue
                 for order in orders:
                     await self.process_order(order)
-                
-                print(self.active_orders)
                 reconnect_attempts = 0  # Resetear intentos si hay éxito
             except Exception as e:
                 reconnect_attempts += 1
@@ -44,27 +42,20 @@ class OrderManager:
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
                 target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
-                
-                # Si era una compra ejecutada, la eliminamos del SortedDict
-                if order['side'] == 'buy' and order['price'] in self.active_orders:
-                    del self.active_orders[order['price']]
-
-                # Crear la nueva orden contraria y agregarla al SortedDict
                 new_order = await self.create_order(side, order['amount'], target_price)
+                
                 if new_order:
-                    self.active_orders[target_price] = (side, order['amount'], new_order['id'])
-
-                logging.info(f"Orden procesada: {side.upper()} {order['amount']} @ {target_price}")
+                    self.active_orders[target_price] = (order['amount'], new_order['id'])
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
     
     async def create_order(self, side, amount, price):
         """Crea una nueva orden de compra o venta y la almacena en SortedDict."""
         try:
-            
-            order = await self.exchange.create_order(self.symbol, 'limit', side, amount, price, params={'posSide': 'long'})
-            logging.info(f"Orden creada: {side.upper()} {amount} @ {price}")
-            return {'id': order['id'], 'price': price, 'amount': amount}
+            formatted_amount = format_quantity(amount / price / self.contract_size, self.amount_format)
+            order = await self.exchange.create_order(self.symbol, 'limit', side, formatted_amount, price, params={'posSide': 'long'})
+            logging.info(f"Orden creada: {side.upper()} {formatted_amount} @ {price}")
+            return {'id': order['id'], 'price': price, 'amount': formatted_amount}
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
             return None
@@ -74,9 +65,8 @@ class OrderManager:
         try:
             prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
             for p in prices:
-                formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
-                order = await self.create_order('buy', formatted_amount, p)
+                order = await self.create_order('buy', self.amount, p)
                 if order:
-                    self.active_orders[p] = ('buy', self.amount, order['id'])
+                    self.active_orders[p] = (self.amount, order['id'])
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
