@@ -60,8 +60,6 @@ class OrderManager:
     async def create_order(self, side, amount, price):
         """Crea una nueva orden de compra o venta y asegura que no se duplique."""
         try:
-            logging.info(f"Intentando crear orden: {side.upper()} {amount} @ {price}")
-
             order = await self.exchange.create_order(self.symbol, 'limit', side, amount, price, params={'posSide': 'long'})
 
             if order:
