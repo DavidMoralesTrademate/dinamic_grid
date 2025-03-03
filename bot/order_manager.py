@@ -72,7 +72,7 @@ class OrderManager:
 
             order = await self.exchange.create_order(
                 self.symbol, 'limit', side, amount, price,
-                params={'posSide': 'long', 'clientOrderId': client_order_id}
+                params={'posSide': 'long', 'clOrdID': client_order_id}
             )
 
             if order:
