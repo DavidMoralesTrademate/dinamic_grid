@@ -97,7 +97,7 @@ class OrderManager:
         except Exception as e:
             logging.error(f"Error en maintain_orders: {e}")
     
-    async def place_orders(self):
+    async def place_orders(self, price):
         """Coloca órdenes de compra en el grid asegurando que sigan al precio y evitando duplicados."""
         try:
             open_orders = await self.exchange.fetch_open_orders(self.symbol)
