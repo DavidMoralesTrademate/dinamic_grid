@@ -42,7 +42,18 @@ class OrderManager:
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
                 target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
-                await self.create_order(side, order['amount'], target_price)
+
+
+                # Si era una compra ejecutada, la eliminamos del SortedDict
+                if order['side'] == 'buy' and order['price'] in self.active_orders:
+                    del self.active_orders[order['price']]
+                
+                # Crear la nueva orden contraria y agregarla al SortedDict como venta
+                new_order = await self.create_order(side, order['amount'], target_price)
+                if new_order:
+                    self.active_orders[target_price] = (side, order['amount'], new_order['id'])
+
+
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
     
