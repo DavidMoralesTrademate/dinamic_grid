@@ -194,6 +194,9 @@ class OrderManager:
             diff = (len(sell_orders) - len(buy_orders))  # o +1
             sells_to_cancel = sorted_sells[:diff]
 
+            if diff > self.num_orders/2:
+                diff = math.floor(open_orders / 2)
+
             # Cancelar esas sells
             for s in sells_to_cancel:
                 await self.exchange.cancel_order(s['id'], self.symbol)
