@@ -67,7 +67,7 @@ class OrderManager:
             client_order_id = f"grid_{self.order_counter:04d}_{side}"  # ID único
             self.order_counter += 1  # Incrementar contador
 
-            params = {'clOrdID': client_order_id}  # Para OKX u otros exchanges compatibles
+            params = {'clOrdID': client_order_id, 'posSide': 'long'}  # Para OKX u otros exchanges compatibles
 
             logging.info(f"Intentando crear orden: {side.upper()} {amount} @ {price} (ID: {client_order_id})")
 
