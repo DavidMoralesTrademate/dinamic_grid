@@ -51,7 +51,7 @@ class OrderManager:
                 # Crear la nueva orden contraria y agregarla al SortedDict como venta
                 new_order = await self.create_order(side, order['amount'], target_price)
                 if new_order:
-                    self.active_orders[target_price] = (side, order['amount'], new_order['id'])
+                    self.active_orders[new_order['price']] = (side, order['amount'], new_order['id'])
 
 
         except Exception as e:
