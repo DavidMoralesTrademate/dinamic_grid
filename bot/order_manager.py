@@ -56,6 +56,7 @@ class OrderManager:
                 if price is not None:
                     target_price = price * spread_multiplier
                     await self.create_order(side_counter, order['amount'], target_price)
+                    await self.rebalance_grid()
                 else:
                     logging.warning(f"No se crea la contraria. La orden {order['id']} no tiene price.")
         except Exception as e:
