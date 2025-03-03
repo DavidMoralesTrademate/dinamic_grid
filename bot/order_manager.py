@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from helpers import calculate_order_prices, format_quantity
+from bot.helpers import calculate_order_prices, format_quantity
 
 class OrderManager:
     def __init__(self, exchange, symbol, config):
