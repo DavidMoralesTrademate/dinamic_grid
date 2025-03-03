@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from sortedcontainers import SortedDict
 from bot.helpers import calculate_order_prices, format_quantity, format_price
 
 class OrderManager:
@@ -13,11 +12,8 @@ class OrderManager:
         self.price_format = config.get('price_format')
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
-        self.order_limit = 10  # Límite de órdenes abiertas permitidas
-        
-        # Estructura para almacenar órdenes activas ordenadas por precio
-        self.active_orders = SortedDict()  # {precio: (cantidad_compra, id_orden)}
-    
+        self.order_limit = 100  # Límite de órdenes abiertas permitidas
+
     async def check_orders(self):
         """Monitorea el estado de las órdenes en tiempo real con reconexión inteligente."""
         reconnect_attempts = 0
@@ -42,10 +38,7 @@ class OrderManager:
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
                 target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
-                new_order = await self.create_order(side, order['amount'], target_price)
-                
-                if new_order:
-                    self.active_orders[target_price] = (order['amount'], new_order['id'])
+                await self.create_order(side, order['amount'], target_price)
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
     
@@ -70,3 +63,4 @@ class OrderManager:
                     self.active_orders[p] = (self.amount, order['id'])
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
+
