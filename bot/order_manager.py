@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from bot.helpers import calculate_order_prices_buy,calculate_order_prices_sell,  format_quantity
 
 class OrderManager:
@@ -230,6 +231,9 @@ class OrderManager:
             diff = (len(buy_orders) - len(sell_orders))
             if diff >= net_pos:
                 diff = net_pos
+
+            if diff > self.num_orders/2:
+                diff = math.floor(open_orders / 2)
                 
             buys_to_cancel = sorted_buys[:diff]
 
