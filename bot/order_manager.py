@@ -232,7 +232,8 @@ class OrderManager:
             await asyncio.sleep(0.1)
 
             if net_pos == len(sell_orders):
-                pass
+                print('nos saliumos')
+                return
             
             sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
 
