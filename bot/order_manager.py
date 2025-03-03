@@ -80,7 +80,7 @@ class OrderManager:
             prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
             for p in prices:
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
-                order = await self.create_order('buy', formatted_amount)
+                order = await self.create_order('buy', formatted_amount, p)
                 if order:
                     self.active_orders[p] = ('buy', self.amount, order['id'])
         except Exception as e:
