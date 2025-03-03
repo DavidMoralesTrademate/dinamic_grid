@@ -90,9 +90,24 @@ class OrderManager:
             
             if order_count < self.num_orders:
                 logging.info(f"Faltan órdenes en el grid ({order_count}/{self.num_orders}). Creando nuevas órdenes...")
-                await self.place_orders(self.lowest_order_price)
+                await self.place_orders()
             elif order_count > self.num_orders:
                 logging.info(f"Exceso de órdenes en el grid ({order_count}/{self.num_orders}). Eliminando las más alejadas...")
                 await self.clean_far_orders()
         except Exception as e:
             logging.error(f"Error en maintain_orders: {e}")
+    
+    async def place_orders(self):
+        """Coloca órdenes de compra en el grid asegurando que sigan al precio y evitando duplicados."""
+        try:
+            open_orders = await self.exchange.fetch_open_orders(self.symbol)
+            existing_prices = {float(order['price']) for order in open_orders}
+            
+            if self.lowest_order_price is None:
+                self.lowest_order_price = await self.get_current_price()
+            
+            new_prices = calculate_order_prices(self.lowest_order_price, self.percentage_spread, self.num_orders - len(open_orders), self.price_format)
+            tasks = [self.create_order('buy', self.amount, p) for p in new_prices if p not in existing_prices]
+            await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception as e:
+            logging.error(f"Error colocando órdenes: {e}")
