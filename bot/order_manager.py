@@ -30,7 +30,6 @@ class OrderManager:
                 if not orders:
                     continue
                 for o in orders:
-                    self._update_local_orders(o)
                     await self.process_order(o)
                 reconnect_attempts = 0
             except Exception as e:
