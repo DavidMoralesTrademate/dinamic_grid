@@ -47,12 +47,10 @@ class OrderManager:
                 # Si era una compra ejecutada, la eliminamos del SortedDict
                 if order['side'] == 'buy' and order['price'] in self.active_orders:
                     self.active_orders.pop(order['price'], None)
-
-                # Verificar si ya hay una orden en ese precio antes de crearla
-                if target_price not in self.active_orders:
-                    new_order = await self.create_order(side, order['amount'], target_price)
-                    if new_order:
-                        self.active_orders[target_price] = (side, order['amount'], new_order['id'])
+                
+                new_order = await self.create_order(side, order['amount'], target_price)
+                if new_order:
+                    self.active_orders[target_price] = (side, order['amount'], new_order['id'])
 
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
