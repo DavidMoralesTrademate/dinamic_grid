@@ -174,7 +174,8 @@ class OrderManager:
 
     async def rebalance(self):
 
-        num_orders = self.exchange.fetch_open_orders(self.symbol)
+        num_orders = await self.exchange.fetch_open_orders(self.symbol)
 
         print(num_orders)
+        print(len(num_orders))
 
