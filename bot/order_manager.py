@@ -99,15 +99,19 @@ class OrderManager:
 
         print(f"maximo de ordenes de venta: {self.total_buys_filled - self.total_sells_filled}")
 
-        
         print("=== Fin de recuento ===\n")
 
 
     async def rebalance_grid(self):
         async with self._rebalance_lock:
             try:
-                if self.total_buys_filled - self.total_sells_filled < self.half:
-                    print('necesitamos revalancear')
+                if self.total_buys_filled - self.total_sells_filled > self.half:
+                    print(f"\n=== NECESITAMOS REVALANCEAR ===")
+
+                    print(f"NECESITAMOS REVALANCEAR")
+                    
+                    print("=== NECESITAMOS REVALANCEAR ===\n")
+                    return
                 else: return
                 
                 # buy_orders = [o for o in open_orders if o['side'] == 'buy']
