@@ -12,7 +12,7 @@ class OrderManager:
         self.price_format = config.get('price_format')
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
-        self.order_limit = 120  # Límite de órdenes abiertas permitidas
+        self.order_limit = 10 # Límite de órdenes abiertas permitidas
         self.orders = {}  # Diccionario para rastrear órdenes activas
 
     async def check_orders(self):
