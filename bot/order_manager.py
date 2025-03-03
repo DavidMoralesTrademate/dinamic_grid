@@ -95,7 +95,7 @@ class OrderManager:
         """
         try:
             params = {'posSide': 'long'}  # Hedge Mode (OKX), ajústalo si requieres 'short'
-            resp = await self.exchange.create_order(
+            await self.exchange.create_order(
                 self.symbol, 
                 'limit', 
                 side, 
@@ -103,22 +103,7 @@ class OrderManager:
                 price, 
                 params=params
             )
-            if resp:
-                oid = resp['id']
-                logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID={oid}")
-                # Guardar local
-                new_od = {
-                    'id': oid,
-                    'side': side,
-                    'price': price,
-                    'amount': amount,
-                    'filled': 0.0,
-                    'status': 'open'
-                }
-                self._add_order_local(new_od)
-                return resp
-            else:
-                logging.warning(f"No resp en create_order: {side} {amount} @ {price}")
+            
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
         return None
