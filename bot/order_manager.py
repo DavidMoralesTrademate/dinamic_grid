@@ -54,7 +54,7 @@ class OrderManager:
     async def place_orders(self, price):
         """Coloca órdenes de compra o venta en el grid."""
         try:
-            prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, 'long', self.price_format)
+            prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
             tasks = [self.create_order('buy', self.amount, p) for p in prices]
             await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
