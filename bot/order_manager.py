@@ -20,79 +20,6 @@ class OrderManager:
         self.total_sells_filled = 0
         self.match_profit = 0.0  # Ganancia estimada en cada venta
 
-        # Estructuras de datos: para en un futuro migrar a grid dinámico
-        self.orders_by_id = {}
-        self.orders_by_price = SortedDict()
-
-    ### -------------------------------------------------
-    ###       Estructuras Locales de Órdenes
-    ### -------------------------------------------------
-    def _add_order_local(self, order):
-        """
-        Inserta la orden en:
-          - orders_by_id[oid]
-          - orders_by_price[price].add(oid)
-        """
-        oid = order['id']
-        price = order['price']
-        self.orders_by_id[oid] = order
-
-        if price not in self.orders_by_price:
-            self.orders_by_price[price] = set()
-        self.orders_by_price[price].add(oid)
-
-    def _remove_order_local(self, order):
-        """
-        Quita la orden de orders_by_id y orders_by_price.
-        """
-        oid = order['id']
-        price = order['price']
-        if oid in self.orders_by_id:
-            del self.orders_by_id[oid]
-
-        if price in self.orders_by_price:
-            s = self.orders_by_price[price]
-            if oid in s:
-                s.remove(oid)
-                if not s:
-                    del self.orders_by_price[price]
-
-    def _update_local_order(self, order):
-        """
-        Actualiza la orden en caso de que cambie de precio o de estado.
-        """
-        oid = order.get('id')
-        if not oid:
-            return
-        new_price = order.get('price')
-        status = order.get('status')
-
-        existing = self.orders_by_id.get(oid)
-        if existing:
-            old_price = existing['price']
-            # si cambió de precio, quitar del old y poner en new
-            if old_price != new_price:
-                if old_price in self.orders_by_price:
-                    s = self.orders_by_price[old_price]
-                    if oid in s:
-                        s.remove(oid)
-                        if not s:
-                            del self.orders_by_price[old_price]
-                # reinsertar
-                if new_price not in self.orders_by_price:
-                    self.orders_by_price[new_price] = set()
-                self.orders_by_price[new_price].add(oid)
-                # Actualizar el dict
-                existing.update(order)
-            else:
-                # precio igual => solo actualizamos status, filled, etc.
-                existing.update(order)
-            self.orders_by_id[oid]['status'] = status
-        else:
-            # No existía => add
-            if new_price is not None:
-                self._add_order_local(order)
-
     ### -------------------------------------------------
     ###       Lógica Principal de watch_orders
     ### -------------------------------------------------
@@ -131,13 +58,8 @@ class OrderManager:
             filled = order.get('filled', 0.0)
             status = order.get('status')
 
-            # Actualizar la orden local
-            self._update_local_order(order)
-
             # Revisar si se llenó: 
-            if status in ('filled','closed') and filled == amount and amount > 0.0:
-                # Llenó: remover de estructuras
-                self._remove_order_local(order)
+            if status in ('filled') and filled == amount and amount > 0.0:
 
                 # Actualizar contadores
                 if side == 'buy':
@@ -234,17 +156,4 @@ class OrderManager:
         print(f"  Profit estimado: {self.match_profit:.4f}")
         print("=== Órdenes Activas (resumen) ===")
 
-        if not self.orders_by_id:
-            print("  No hay órdenes activas.")
-        else:
-            # Recorremos sorted por price asc
-            for price in self.orders_by_price.keys():
-                order_ids = self.orders_by_price[price]
-                for oid in order_ids:
-                    od = self.orders_by_id.get(oid, {})
-                    side = od.get('side','?')
-                    st = od.get('status','?')
-                    f = od.get('filled',0.0)
-                    amt = od.get('amount',0.0)
-                    print(f"    price={price}, ID={oid}, side={side}, status={st}, amount={amt}, filled={f}")
         print("=== Fin ===\n")
