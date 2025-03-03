@@ -172,5 +172,5 @@ class OrderManager:
 
 
 
-    def rebalance(self):
+    async def rebalance(self):
         print('rebalanceo')
