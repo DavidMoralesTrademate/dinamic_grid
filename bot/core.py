@@ -63,6 +63,7 @@ class BotMain:
                 await asyncio.sleep(wait_time)
     
     async def rebalance_loop(self):
+        await asyncio.sleep(60)
         while True:
             await asyncio.sleep(2)
             await self.order_manager.rebalance()
