@@ -20,90 +20,6 @@ class OrderManager:
 
         self._rebalance_lock = asyncio.Lock()
 
-        self.orders_by_id = {}
-        self.orders_by_price = SortedDict()
-    
-    def _add_order_local(self, order):
-        """
-        Añade la orden a las estructuras locales, salvo que price=None.
-        """
-        oid = order['id']
-        price = order['price']
-
-        # NEW: check if price is None => no la insertamos
-        if price is None:
-            logging.debug(f"No se añade la orden {oid} al local, price=None.")
-            return
-
-        self.orders_by_id[oid] = order
-
-        if price not in self.orders_by_price:
-            self.orders_by_price[price] = set()
-        self.orders_by_price[price].add(oid)
-
-    def _remove_order_local(self, order):
-        oid = order['id']
-        price = order['price']
-        if oid in self.orders_by_id:
-            del self.orders_by_id[oid]
-        # Si price is None, no estaba en el SortedDict
-        if price is not None and price in self.orders_by_price:
-            self.orders_by_price[price].discard(oid)
-            if not self.orders_by_price[price]:
-                del self.orders_by_price[price]
-
-    def _update_local_orders(self, order):
-        """
-        Actualiza el estado local de la orden recibida:
-         - Si está abierta o parcialmente llena, la guardamos.
-         - Si está cerrada o cancelada, la removemos.
-        """
-        oid = order.get('id')
-        status = order.get('status')
-        price = order.get('price')
-
-        if not oid:
-            return
-
-        # Revisar estado
-        if status in ('open', 'partially_filled'):
-            existing = self.orders_by_id.get(oid)
-            # Si la orden existía y cambió de precio
-            if existing:
-                old_price = existing['price']
-                # Si sale None en la nueva => no reordenamos
-                if price is None:
-                    # Mantenemos la info antigua pero actualizamos status
-                    existing.update(order)
-                    self.orders_by_id[oid] = existing
-                else:
-                    # Compara con old_price, si difiere, quitar del old y poner en new
-                    if old_price != price:
-                        # Quitar del old_price
-                        if old_price is not None and old_price in self.orders_by_price:
-                            self.orders_by_price[old_price].discard(oid)
-                            if not self.orders_by_price[old_price]:
-                                del self.orders_by_price[old_price]
-                        # Actualizar la orden
-                        existing.update(order)
-                        # Añadir al nuevo price
-                        if price not in self.orders_by_price:
-                            self.orders_by_price[price] = set()
-                        self.orders_by_price[price].add(oid)
-                        self.orders_by_id[oid] = existing
-                    else:
-                        # mismo precio (o ambos None?), actualizamos
-                        existing.update(order)
-                        self.orders_by_id[oid] = existing
-            else:
-                # Orden nueva
-                self._add_order_local(order)
-
-        elif status in ('closed', 'canceled', 'filled'):
-            self._remove_order_local(order)
-        else:
-            # Otros estados
-            pass
 
     async def check_orders(self):
         reconnect_attempts = 0
@@ -182,25 +98,12 @@ class OrderManager:
             logging.error(f"Error colocando órdenes: {e}")
 
     def print_active_orders(self):
-        print("\n=== Órdenes Activas ===")
-        if not self.orders_by_id:
-            print("No hay órdenes activas en orders_by_id.")
-            return
+        print(f"\n=== Numero de Match: {self.total_sells_filled}, Match profit: {self.total_sells_filled * (self.amount*self.percentage_spread) } ===")
 
-        print(f"Total de órdenes activas: {len(self.orders_by_id)}")
+        print(f"maximo de ordenes de venta: {self.total_buys_filled - self.total_sells_filled}")
 
-        for price in self.orders_by_price.keys():
-            order_ids = self.orders_by_price[price]
-            print(f"Precio: {price}, Cant. órdenes: {len(order_ids)}")
-            for oid in order_ids:
-                od = self.orders_by_id.get(oid, {})
-                side = od.get('side', '?')
-                status = od.get('status', '?')
-                amount = od.get('amount', '?')
-                filled = od.get('filled', '?')
-                print(f"   - ID={oid}, side={side}, status={status}, amount={amount}, filled={filled}")
-        print("=== Fin de órdenes activas ===\n")
-
+        
+        print("=== Fin de recuento ===\n")
 
 
     async def rebalance_grid(self):
