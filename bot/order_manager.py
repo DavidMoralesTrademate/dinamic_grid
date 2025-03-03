@@ -56,33 +56,35 @@ class OrderManager:
             formatted_amount = max(format_quantity(amount / price / self.contract_size, self.amount_format), self.min_order_amount)
             order = await self.exchange.create_order(self.symbol, 'limit', side, formatted_amount, price, params={'posSide': 'long'})
             self.orders[order['id']] = order  # Guardar la orden en el diccionario
-            self.update_grid_prices()
+            await self.update_grid_prices()
             logging.info(f"Orden creada: {side.upper()} {formatted_amount} @ {price}")
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
     
     async def maintain_orders(self):
-        """Mantiene siempre el número correcto de órdenes activas sin huecos."""
+        """Mantiene siempre el número correcto de órdenes activas sin huecos y sin exceder el límite."""
         try:
             await self.update_grid_prices()
-            if self.lowest_order_price is None:
-                self.lowest_order_price = await self.get_current_price()
-            if len(self.orders) < self.num_orders:
-                logging.info("Faltan órdenes en el grid. Creando nuevas órdenes...")
+            open_orders = await self.exchange.fetch_open_orders(self.symbol)
+            order_count = len(open_orders)
+            
+            if order_count < self.num_orders:
+                logging.info(f"Faltan órdenes en el grid ({order_count}/{self.num_orders}). Creando nuevas órdenes...")
                 await self.place_orders(self.lowest_order_price)
-            elif len(self.orders) > self.num_orders:
-                logging.info("Demasiadas órdenes abiertas. Eliminando las más alejadas...")
+            elif order_count > self.num_orders:
+                logging.info(f"Exceso de órdenes en el grid ({order_count}/{self.num_orders}). Eliminando las más alejadas...")
                 await self.clean_far_orders()
         except Exception as e:
             logging.error(f"Error en maintain_orders: {e}")
     
     async def clean_far_orders(self):
-        """Elimina las órdenes más alejadas para mantener el grid organizado."""
+        """Elimina las órdenes más alejadas para mantener el grid organizado y dentro del límite."""
         try:
             open_orders = await self.exchange.fetch_open_orders(self.symbol)
             if open_orders:
                 orders_sorted = sorted(open_orders, key=lambda x: float(x['price']))
-                for order in orders_sorted[:len(open_orders) - self.num_orders]:
+                excess_orders = len(open_orders) - self.num_orders
+                for order in orders_sorted[:excess_orders]:
                     await self.exchange.cancel_order(order['id'], self.symbol)
                     logging.info(f"Orden cancelada: {order['id']} @ {order['price']}")
         except Exception as e:
@@ -102,11 +104,17 @@ class OrderManager:
         return (ticker['bid'] + ticker['ask']) / 2
     
     async def place_orders(self, price):
-        """Coloca órdenes de compra en el grid asegurando que no haya huecos."""
+        """Coloca órdenes de compra en el grid asegurando que no haya huecos y respetando el límite."""
         try:
+            open_orders = await self.exchange.fetch_open_orders(self.symbol)
+            order_count = len(open_orders)
+            if order_count >= self.num_orders:
+                logging.info("El grid ya tiene el número máximo de órdenes permitidas.")
+                return
+            
             if price is None:
                 price = await self.get_current_price()
-            prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
+            prices = calculate_order_prices(price, self.percentage_spread, self.num_orders - order_count, self.price_format)
             tasks = [self.create_order('buy', self.amount, p) for p in prices]
             await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
