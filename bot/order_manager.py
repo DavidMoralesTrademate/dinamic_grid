@@ -51,7 +51,7 @@ class OrderManager:
         """Crea una nueva orden de compra o venta y la registra."""
         try:
             formatted_amount = format_quantity(amount / price / self.contract_size, self.amount_format)
-            order = await self.exchange.create_order(self.symbol, 'limit', side, formatted_amount, price)
+            order = await self.exchange.create_order(self.symbol, 'limit', side, formatted_amount, price, params={'posSide': 'long'})
             self.orders[order['id']] = order  # Guardar la orden en el diccionario
             logging.info(f"Orden creada: {side.upper()} {formatted_amount} @ {price}")
         except Exception as e:
