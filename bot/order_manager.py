@@ -188,6 +188,40 @@ class OrderManager:
         if len(sell_orders) > len(buy_orders) + 1*1: 
             print('necesitamos cancelar ventas y poner compras')
 
+            sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+
+            # Decide cuántas cancelar, ej: diff = len(sell_orders) - len(buy_orders)
+            diff = (len(sell_orders) - len(buy_orders))  # o +1
+            sells_to_cancel = sorted_sells[:diff]
+
+            # Cancelar esas sells
+            for s in sells_to_cancel:
+                await self.exchange.cancel_order(s['id'], self.symbol)
+
+            sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
+            
+
+            try:
+                prices = calculate_order_prices(
+                    sorted_buys[0]['price'] * 1-self.percentage_spread, 
+                    self.percentage_spread, 
+                    diff, 
+                    self.price_format
+                )
+                count = 0
+                for p in prices:
+                    if count >= self.num_orders:
+                        break
+                    amt = format_quantity(
+                        self.amount / p / self.contract_size, 
+                        self.amount_format
+                    )
+                    await self.create_order('buy', amt, p)
+                    count += 1
+            except Exception as e:
+                logging.error(f"Error en place_orders: {e}")
+
+
         # rebalancear ventas
         if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders): 
             print('Puede que nececite mas ventas')
