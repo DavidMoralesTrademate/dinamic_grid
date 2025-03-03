@@ -37,7 +37,7 @@ class OrderManager:
     async def process_order(self, order):
         """Procesa una orden ejecutada y coloca una orden contraria."""
         try:
-            logging.info(f"Procesando orden ejecutada: {order}")
+            logging.info(f"Procesando orden ejecutada: {self.active_orders}")
 
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
