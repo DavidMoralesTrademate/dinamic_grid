@@ -135,6 +135,7 @@ class OrderManager:
         reconnect_attempts = 0
         while True:
             try:
+                self.print_active_orders()
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
@@ -214,127 +215,6 @@ class OrderManager:
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
 
-
-            import asyncio
-import logging
-from sortedcontainers import SortedDict
-
-class OrderManager:
-    def __init__(self, exchange, symbol):
-        self.exchange = exchange
-        self.symbol = symbol
-
-        # Diccionario: { order_id: order_info }
-        self.orders_by_id = {}
-
-        # SortedDict de precios -> set de order_ids
-        self.orders_by_price = SortedDict()
-
-    def _add_order_local(self, order):
-        """
-        Inserta la orden en nuestras estructuras internas (orders_by_id, orders_by_price).
-        order debe contener al menos: 'id', 'price', 'status'.
-        """
-        oid = order['id']
-        price = order['price']
-
-        self.orders_by_id[oid] = order  # Guarda todo el dict de la orden
-
-        if price not in self.orders_by_price:
-            self.orders_by_price[price] = set()
-        self.orders_by_price[price].add(oid)
-
-    def _remove_order_local(self, order):
-        """
-        Elimina la orden de nuestras estructuras, usando su 'id' y 'price'.
-        """
-        oid = order['id']
-        price = order['price']
-
-        # Quitar de orders_by_id
-        if oid in self.orders_by_id:
-            del self.orders_by_id[oid]
-
-        # Quitar de orders_by_price
-        if price in self.orders_by_price:
-            self.orders_by_price[price].discard(oid)
-            if not self.orders_by_price[price]:
-                del self.orders_by_price[price]
-
-    def _update_local_orders(self, order):
-        """
-        Actualiza el estado local según el 'status' de la orden.
-        - Si está 'open' o 'partially_filled', la agregamos/actualizamos.
-        - Si está 'closed', 'canceled' o 'filled', la eliminamos.
-        """
-        oid = order.get('id')
-        price = order.get('price')
-        status = order.get('status', '')
-
-        if not oid or price is None:
-            return  # Faltan datos, no se puede manejar
-
-        if status in ('open', 'partially_filled'):
-            # Podría cambiar de precio, por eso revisamos si existía antes
-            existing = self.orders_by_id.get(oid)
-            if existing:
-                old_price = existing['price']
-                if old_price != price:
-                    # Sacarla de la lista del precio anterior
-                    if old_price in self.orders_by_price:
-                        self.orders_by_price[old_price].discard(oid)
-                        if not self.orders_by_price[old_price]:
-                            del self.orders_by_price[old_price]
-                    # Actualizar info
-                    existing.update(order)
-                    # Agregar al nuevo precio
-                    if price not in self.orders_by_price:
-                        self.orders_by_price[price] = set()
-                    self.orders_by_price[price].add(oid)
-                    self.orders_by_id[oid] = existing
-                else:
-                    # Mismo precio, solo actualizar
-                    existing.update(order)
-                    self.orders_by_id[oid] = existing
-            else:
-                # Orden nueva en nuestro registro
-                self._add_order_local(order)
-
-        elif status in ('closed', 'canceled', 'filled'):
-            # Orden inactiva, remover
-            self._remove_order_local(order)
-
-        else:
-            # Otros estados posibles, según ccxt => ignora o maneja según tu necesidad
-            pass
-
-    async def check_orders(self):
-        """
-        Monitorea las órdenes desde watch_orders y actualiza nuestro estado local.
-        """
-        reconnect_attempts = 0
-        while True:
-            try:
-                self.print_active_orders()
-                orders = await self.exchange.watch_orders(self.symbol)
-                if not orders:
-                    continue
-
-                for o in orders:
-                    # Actualizar estructuras internas
-                    self._update_local_orders(o)
-
-                # Imprimir un estado básico de las órdenes activas
-                self.print_active_orders()
-
-                reconnect_attempts = 0
-            except Exception as e:
-                reconnect_attempts += 1
-                wait_time = min(2 ** reconnect_attempts, 60)
-                logging.error(f"Error en check_orders (intento {reconnect_attempts}): {e}")
-                logging.info(f"Reintentando en {wait_time} s...")
-                await asyncio.sleep(wait_time)
-
     def print_active_orders(self):
         """
         Imprime en consola las órdenes activas, ordenadas por precio,
@@ -361,7 +241,6 @@ class OrderManager:
                 print(f"   - ID={oid}, side={side}, status={status}, amount={amount}, filled={filled}")
 
         print("=== Fin de órdenes activas ===\n")
-
 
 
     # async def rebalance_grid(self):
