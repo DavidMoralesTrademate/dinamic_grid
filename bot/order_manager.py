@@ -251,10 +251,10 @@ class OrderManager:
                     if count >= self.num_orders:
                         break
                     amt = format_quantity(
-                        self.amount / p / self.contract_size, 
-                        self.amount_format * 1-self.percentage_spread
+                        (self.amount * (1-self.percentage_spread)) / p / self.contract_size, 
+                        self.amount_format 
                     )
-                    await self.create_order('buy', amt, p)
+                    await self.create_order('sell', amt, p)
                     count += 1
             except Exception as e:
                 logging.error(f"Error en place_orders: {e}")
