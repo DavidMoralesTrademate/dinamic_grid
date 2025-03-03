@@ -264,71 +264,38 @@ class OrderManager:
 
 
     async def rebalance_grid(self, executed_order):
+        """
+        Rebalancea sin mirar el precio, solo fijándose en el conteo de órdenes BUY vs. SELL 
+        en relación a num_orders y el límite impuesto por net_pos.
+        """
         async with self._rebalance_lock:
             try:
-                # 1. Cargar órdenes abiertas y calcular net_pos
                 open_orders = await self.exchange.fetch_open_orders(self.symbol)
 
                 buy_orders = [o for o in open_orders if o['side'] == 'buy']
                 sell_orders = [o for o in open_orders if o['side'] == 'sell']
-
                 num_buy_orders = len(buy_orders)
                 num_sell_orders = len(sell_orders)
+
                 total_open = num_buy_orders + num_sell_orders
-
-                print('-'*20)
-                print(self.total_buys_filled, self.total_sells_filled)
-                print(self.total_buys_filled - self.total_sells_filled)
-                print('-'*20)
-
-                
-
                 net_pos = self.total_buys_filled - self.total_sells_filled
-                max_sells_allowed = max(net_pos, 0)
+                max_sells_allowed = max(net_pos, 0)  # no más ventas que posición neta
 
-                # 2. Determinar cuántas órdenes queremos de venta (sell_target) y de compra (buy_target).
-                sell_target = min(max_sells_allowed, self.num_orders)
-                buy_target = self.num_orders - sell_target
+                logging.info(f"[Rebalance] net_pos={net_pos}, buys_open={num_buy_orders}, sells_open={num_sell_orders}")
 
-                logging.info(f"[Rebalance] net_pos={net_pos}, buy_orders={num_buy_orders}, sell_orders={num_sell_orders}, total_open={total_open}")
-                logging.info(f"[Rebalance] buy_target={buy_target}, sell_target={sell_target}")
-
-                # 3A. Ajustar SELL al sell_target
-                # 3A-1: Si hay más SELL de las necesarias, cancela las sobrantes.
-                if num_sell_orders > sell_target:
-                    # Decide el criterio de qué órdenes SELL cancelar.
-                    # Por ejemplo, cancelar las más alejadas del precio actual, o las más caras, etc.
-                    current_price = executed_order['price']
-                    sell_orders_sorted = sorted(
-                        sell_orders, 
-                        key=lambda o: abs(o['price'] - current_price), 
-                        reverse=True  # primero las más alejadas
-                    )
-                    excess_sells = num_sell_orders - sell_target
-                    for i in range(excess_sells):
-                        order_to_cancel = sell_orders_sorted[i]
+                # 1. Si tenemos más órdenes de venta de las permitidas, cancelar el exceso.
+                if num_sell_orders > max_sells_allowed:
+                    sell_orders_sorted = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+                    excess = num_sell_orders - max_sells_allowed
+                    for i in range(excess):
+                        to_cancel = sell_orders_sorted[i]
                         try:
-                            await self.exchange.cancel_order(order_to_cancel['id'], self.symbol)
-                            logging.info(f"[Rebalance] Cancelada SELL {order_to_cancel['id']} @ {order_to_cancel['price']} (exceso).")
+                            await self.exchange.cancel_order(to_cancel['id'], self.symbol)
+                            logging.info(f"[Rebalance] Cancelada SELL {to_cancel['id']} @ {to_cancel['price']} (exceso).")
                         except Exception as e:
-                            logging.error(f"Error cancelando SELL {order_to_cancel['id']}: {e}")
+                            logging.error(f"Error cancelando SELL {to_cancel['id']}: {e}")
 
-                elif num_sell_orders < sell_target:
-                    # 3A-2: Si faltan SELL, crear las necesarias. 
-                    # Aqui decides los precios usando tu lógica de grid (arriba del precio actual).
-                    current_price = executed_order['price']
-                    missing = sell_target - num_sell_orders
-                    for i in range(missing):
-                        # Ejemplo: escalonar con el spread
-                        price_for_sell = current_price * (1 + self.percentage_spread*(i+1))
-                        # La cantidad la puedes basar en la última orden ejecutada o un valor fijo.
-                        amount = executed_order['amount']  # ejemplo
-                        created = await self.create_order('sell', amount, price_for_sell)
-                        if created:
-                            logging.info(f"[Rebalance] SELL adicional creada @ {price_for_sell} para completar {sell_target}.")
-
-                # 3B. Ajustar BUY al buy_target
-                # (Haz de nuevo fetch_open_orders tras lo anterior, para estar seguro de tu estado actual)
+                # Actualizamos el listado tras potenciales cancelaciones
                 open_orders = await self.exchange.fetch_open_orders(self.symbol)
                 buy_orders = [o for o in open_orders if o['side'] == 'buy']
                 sell_orders = [o for o in open_orders if o['side'] == 'sell']
@@ -336,39 +303,85 @@ class OrderManager:
                 num_sell_orders = len(sell_orders)
                 total_open = num_buy_orders + num_sell_orders
 
-                if num_buy_orders > buy_target:
-                    # Cancelar las más lejanas (o a tu criterio)
-                    current_price = executed_order['price']
-                    buy_orders_sorted = sorted(
-                        buy_orders, 
-                        key=lambda o: abs(o['price'] - current_price), 
-                        reverse=True
-                    )
-                    excess_buys = num_buy_orders - buy_target
-                    for i in range(excess_buys):
-                        order_to_cancel = buy_orders_sorted[i]
-                        try:
-                            await self.exchange.cancel_order(order_to_cancel['id'], self.symbol)
-                            logging.info(f"[Rebalance] Cancelada BUY {order_to_cancel['id']} @ {order_to_cancel['price']} (exceso).")
-                        except Exception as e:
-                            logging.error(f"Error cancelando BUY {order_to_cancel['id']}: {e}")
+                # 2. Reequilibrar el conteo para que num_buy_orders ≈ num_sell_orders, 
+                #    manteniendo total = num_orders y no más SELL que max_sells_allowed
 
-                elif num_buy_orders < buy_target:
-                    # Crear las que faltan en BUY
-                    current_price = executed_order['price']
-                    missing = buy_target - num_buy_orders
-                    for i in range(missing):
-                        # Escalonar hacia abajo
-                        price_for_buy = current_price * (1 - self.percentage_spread*(i+1))
-                        amount = executed_order['amount']  # por ejemplo
-                        created = await self.create_order('buy', amount, price_for_buy)
+                #    Ejemplo de estrategia simple:
+                #    - si num_sell_orders > num_buy_orders y num_sell_orders > max_sells_allowed, ya lo manejamos. 
+                #      Si todavía sobran SELL (excediendo un equilibrio simple), cancelamos las que exceden el 50-50.
+                #    - si num_buy_orders > num_sell_orders, pasamos alguna BUY a SELL siempre que net_pos >= num_sell_orders+1.
+
+                desired_each_side = self.num_orders // 2  # base 50:50
+                # Ajustamos a la posición neta si es menor que desired_each_side
+                # y para no exceder max_sells_allowed
+                desired_sell = min(desired_each_side, max_sells_allowed)
+                desired_buy = self.num_orders - desired_sell
+
+                # 2A. Si tengo más SELL de las deseadas, cancelo el exceso.
+                if num_sell_orders > desired_sell:
+                    to_cancel = num_sell_orders - desired_sell
+                    # cancelar las SELL más alejadas de la ejecución (o criterio que gustes)
+                    sell_orders_sorted = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+                    for i in range(to_cancel):
+                        if i < len(sell_orders_sorted):
+                            order_to_cancel = sell_orders_sorted[i]
+                            try:
+                                await self.exchange.cancel_order(order_to_cancel['id'], self.symbol)
+                                logging.info(f"[Rebalance] Cancelada SELL {order_to_cancel['id']} @ {order_to_cancel['price']} (reequilibrio).")
+                            except Exception as e:
+                                logging.error(f"Error cancelando SELL {order_to_cancel['id']}: {e}")
+
+                # 2B. Si tengo menos SELL de las deseadas, crear las que falten (respetando max_sells_allowed).
+                open_orders = await self.exchange.fetch_open_orders(self.symbol)
+                sell_orders = [o for o in open_orders if o['side'] == 'sell']
+                num_sell_orders = len(sell_orders)
+                if num_sell_orders < desired_sell:
+                    missing_sells = desired_sell - num_sell_orders
+                    # Creamos 'missing_sells' órdenes de venta
+                    for i in range(missing_sells):
+                        # Mismo amount que la orden ejecutada, 
+                        # o un amount calculado (p.ej. self.amount / X).
+                        amount = executed_order['amount']
+                        # Precio arbitrario: por ahora creamos la SELL un "pelín" más alto que la última ejecución,
+                        # o podrías usar calculate_order_prices.
+                        new_price = executed_order['price'] * (1 + self.percentage_spread*(i+1))
+                        created = await self.create_order('sell', amount, new_price)
                         if created:
-                            logging.info(f"[Rebalance] BUY adicional creada @ {price_for_buy} para completar {buy_target}.")
+                            logging.info(f"[Rebalance] SELL creada @ {new_price} para equilibrar hacia {desired_sell} SELL.")
+                
+                # 2C. Actualizar buy_orders tras potenciales cambios en SELL
+                open_orders = await self.exchange.fetch_open_orders(self.symbol)
+                buy_orders = [o for o in open_orders if o['side'] == 'buy']
+                num_buy_orders = len(buy_orders)
 
-                # Al final de esto, deberías tener:
-                # num_buy_orders = buy_target
-                # num_sell_orders = sell_target
-                # total_open = self.num_orders
-                logging.info("[Rebalance] Proceso de rebalance completado.")
+                # Si ahora hay más BUY de las deseadas, cancelo el exceso
+                if num_buy_orders > desired_buy:
+                    to_cancel = num_buy_orders - desired_buy
+                    # cancelar las BUY más alejadas (o criterio que gustes)
+                    buy_orders_sorted = sorted(buy_orders, key=lambda o: o['price'])
+                    for i in range(to_cancel):
+                        if i < len(buy_orders_sorted):
+                            order_to_cancel = buy_orders_sorted[i]
+                            try:
+                                await self.exchange.cancel_order(order_to_cancel['id'], self.symbol)
+                                logging.info(f"[Rebalance] Cancelada BUY {order_to_cancel['id']} @ {order_to_cancel['price']} (reequilibrio).")
+                            except Exception as e:
+                                logging.error(f"Error cancelando BUY {order_to_cancel['id']}: {e}")
+
+                # Si hay menos BUY de las deseadas, creamos lo que falte.
+                open_orders = await self.exchange.fetch_open_orders(self.symbol)
+                buy_orders = [o for o in open_orders if o['side'] == 'buy']
+                num_buy_orders = len(buy_orders)
+                if num_buy_orders < desired_buy:
+                    missing_buys = desired_buy - num_buy_orders
+                    for i in range(missing_buys):
+                        amount = executed_order['amount']
+                        new_price = executed_order['price'] * (1 - self.percentage_spread*(i+1))
+                        created = await self.create_order('buy', amount, new_price)
+                        if created:
+                            logging.info(f"[Rebalance] BUY creada @ {new_price} para equilibrar hacia {desired_buy} BUY.")
+
+                logging.info("[Rebalance] Finalizado el rebalance solo con conteo de BUY vs SELL.")
             except Exception as e:
                 logging.error(f"Error en el rebalanceo de la grid: {e}")
+
