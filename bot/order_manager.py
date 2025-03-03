@@ -81,6 +81,15 @@ class OrderManager:
         except Exception as e:
             logging.error(f"Error actualizando grid prices: {e}")
     
+    async def get_current_price(self):
+        """Obtiene el precio de mercado actual."""
+        try:
+            ticker = await self.exchange.fetch_ticker(self.symbol)
+            return (ticker['bid'] + ticker['ask']) / 2
+        except Exception as e:
+            logging.error(f"Error obteniendo precio actual: {e}")
+            return None
+    
     async def maintain_orders(self):
         """Mantiene siempre el número correcto de órdenes activas sin huecos y sin exceder el límite."""
         try:
@@ -96,18 +105,3 @@ class OrderManager:
                 await self.clean_far_orders()
         except Exception as e:
             logging.error(f"Error en maintain_orders: {e}")
-    
-    async def place_orders(self, price):
-        """Coloca órdenes de compra en el grid asegurando que sigan al precio y evitando duplicados."""
-        try:
-            open_orders = await self.exchange.fetch_open_orders(self.symbol)
-            existing_prices = {float(order['price']) for order in open_orders}
-            
-            if self.lowest_order_price is None:
-                self.lowest_order_price = await self.get_current_price()
-            
-            new_prices = calculate_order_prices(self.lowest_order_price, self.percentage_spread, self.num_orders - len(open_orders), self.price_format)
-            tasks = [self.create_order('buy', self.amount, p) for p in new_prices if p not in existing_prices]
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception as e:
-            logging.error(f"Error colocando órdenes: {e}")
