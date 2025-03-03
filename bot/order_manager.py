@@ -203,7 +203,6 @@ class OrderManager:
 
             sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
             
-
             try:
                 prices = calculate_order_prices_buy(
                     sorted_buys[0]['price'] * 1-self.percentage_spread, 
@@ -229,7 +228,12 @@ class OrderManager:
         if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders):
             print('Puede que nececite mas ventas')
             print(f'net_pos: {net_pos} sell_orders: {len(sell_orders)}') 
+            
+            await asyncio.sleep(0.1)
 
+            if net_pos == len(sell_orders):
+                pass
+            
             sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
 
             diff = (len(buy_orders) - len(sell_orders))
