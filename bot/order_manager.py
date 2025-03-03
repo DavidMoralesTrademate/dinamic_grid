@@ -24,8 +24,8 @@ class OrderManager:
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
-                tasks = [asyncio.create_task(self.process_order(order)) for order in orders]
-                await asyncio.gather(*tasks, return_exceptions=True)  # Ejecutar en paralelo
+                for order in orders:
+                    asyncio.create_task(self.process_order(order))  # Ejecutar sin esperar
                 reconnect_attempts = 0  # Resetear intentos si hay éxito
             except Exception as e:
                 reconnect_attempts += 1
