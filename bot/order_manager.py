@@ -105,7 +105,7 @@ class OrderManager:
     async def rebalance_grid(self):
         async with self._rebalance_lock:
             try:
-                if self.total_buys_filled - self.total_sells_filled > self.half:
+                if self.total_buys_filled - self.total_sells_filled > self.num_orders/2:
                     print(f"\n=== NECESITAMOS REVALANCEAR ===")
 
                     print(f"NECESITAMOS REVALANCEAR")
