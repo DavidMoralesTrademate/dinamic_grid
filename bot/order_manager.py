@@ -173,4 +173,8 @@ class OrderManager:
 
 
     async def rebalance(self):
-        print('rebalanceo')
+
+        num_orders = self.exchange.open_orders(self.symbol)
+
+        print(num_orders)
+
