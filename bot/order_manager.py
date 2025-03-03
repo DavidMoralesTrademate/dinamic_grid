@@ -315,7 +315,7 @@ class OrderManager:
         # 3) Paso final: Asegurar que el total de órdenes sea exactamente self.num_orders
         # --------------------------------------------------------------------
         # Esperar un breve momento para que se reflejen las cancelaciones
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.2)
         open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
@@ -351,7 +351,7 @@ class OrderManager:
                     count += 1
             except Exception as e:
                 logging.error(f"[Rebalance] Error creando las {faltan} compras extra: {e}")
-        elif total_final > self.num_orders:
+        if total_final > self.num_orders:
             extra = total_final - self.num_orders
             logging.info(f"[Rebalance] Existen {total_final} órdenes; se cancelarán {extra} para ajustar a {self.num_orders}.")
             # Cancelamos las órdenes que estén más alejadas, por ejemplo
