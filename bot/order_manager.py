@@ -121,7 +121,6 @@ class OrderManager:
 
                 num_buy_orders = len(buy_orders)
                 num_sell_orders = len(sell_orders)
-                total_open = num_buy_orders + num_sell_orders
 
                 net_pos = self.total_buys_filled - self.total_sells_filled
                 max_sells_allowed = max(net_pos, 0)
@@ -134,6 +133,7 @@ class OrderManager:
 
                 logging.info(f"[Rebalance] net_pos={net_pos}, buys_open={num_buy_orders}, sells_open={num_sell_orders}")
                 logging.info(f"[Rebalance] desired_buy={desired_buy}, desired_sell={desired_sell}")
+                logging.info(f"[Rebalance] num_buy_orders={self.total_buys_filled}, num_sell_orders={self.total_sells_filled}, num_will_orders_sell={net_pos}")
 
                 # Ajustar SELL al desired_sell
                 if num_sell_orders > desired_sell:
@@ -144,7 +144,7 @@ class OrderManager:
                     current_price = executed_order['price']
                     sell_orders_sorted = sorted(
                         sell_orders, 
-                        key=lambda o: abs(o['price'] - current_price),
+                        key=lambda o: abs(o['price']),
                         reverse=True
                     )
                     for i in range(excess):
