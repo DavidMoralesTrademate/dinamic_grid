@@ -50,7 +50,7 @@ class OrderManager:
         reconnect_attempts = 0
         while True:
             try:
-                self.print_stats()  # Imprime contadores y estado
+                #self.print_stats()  # Imprime contadores y estado
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
@@ -226,8 +226,9 @@ class OrderManager:
 
 
         # rebalancear ventas
-        if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders): 
+        if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders):
             print('Puede que nececite mas ventas')
+            print(f'net_pos: {net_pos} sell_orders: {len(sell_orders)}') 
 
             sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
 
