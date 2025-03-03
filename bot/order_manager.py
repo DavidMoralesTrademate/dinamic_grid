@@ -15,10 +15,9 @@ class OrderManager:
         self.contract_size = config.get('contract_size')
 
         self.active_orders = SortedDict()  # {client_order_id: (side, cantidad, precio, id_orden)}
-        self.order_counter = 0  # Contador para client_order_id
 
     async def check_orders(self):
-        """Monitorea el estado de las órdenes en tiempo real con reconexión inteligente."""
+        """Monitorea órdenes en tiempo real sin bloquear el loop."""
         reconnect_attempts = 0
         while True:
             try:
@@ -26,81 +25,80 @@ class OrderManager:
                 if not orders:
                     continue
                 for order in orders:
-                    asyncio.create_task(self.process_order(order))  # Ejecutar sin esperar
-                reconnect_attempts = 0  # Resetear intentos si hay éxito
+                    asyncio.create_task(self.process_order(order))  # Se procesa en paralelo
+                reconnect_attempts = 0  
             except Exception as e:
                 reconnect_attempts += 1
-                wait_time = min(2 ** reconnect_attempts, 60)  # Backoff exponencial
+                wait_time = min(2 ** reconnect_attempts, 60)
                 logging.error(f"Error en check_orders ({reconnect_attempts} intento): {e}")
                 logging.info(f"Reintentando en {wait_time} segundos...")
                 await asyncio.sleep(wait_time)
 
     async def process_order(self, order):
-        """Procesa una orden ejecutada y coloca una orden contraria."""
+        """Procesa una orden ejecutada y coloca la orden contraria con el mismo `client_order_id`."""
         try:
             logging.info(f"Procesando orden ejecutada: {self.active_orders}")
 
-            if order['filled'] == order['amount']:
-                side = 'sell' if order['side'] == 'buy' else 'buy'
-                spread_multiplier = 1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread
-                target_price = order['price'] * spread_multiplier
+            # Buscamos la orden en `active_orders`
+            client_id = None
+            for key, value in self.active_orders.items():
+                if value[3] == order['id']:  # Buscamos por el ID de la orden en el exchange
+                    client_id = key
+                    break
 
-                # Buscar el client_order_id correspondiente al precio ejecutado
-                client_order_id = next((key for key, val in self.active_orders.items() if val[2] == order['price']), None)
+            if not client_id:
+                logging.warning(f"Orden ejecutada no encontrada en active_orders: {order['id']}")
+                return
 
-                if client_order_id:
-                    self.active_orders.pop(client_order_id, None)
+            side, cantidad, precio, _ = self.active_orders.pop(client_id)
 
-                # Crear la nueva orden contraria y agregarla al SortedDict con un nuevo client_order_id
-                new_order = await self.create_order(side, order['amount'], target_price)
-                if new_order:
-                    new_client_order_id = f"grid_{self.order_counter:04d}_{side}"
-                    self.order_counter += 1
-                    self.active_orders[new_client_order_id] = (side, order['amount'], new_order['price'], new_order['id'])
+            # Generar la orden contraria con el mismo grid_id
+            grid_id = client_id.split('_')[1]  # Extraer el número de grid
+            new_side = 'sell' if side == 'buy' else 'buy'
+            new_price = precio * (1 + self.percentage_spread if new_side == 'sell' else 1 - self.percentage_spread)
+            new_client_id = f"grid_{grid_id}_{new_side}"
+
+            new_order = await self.create_order(new_side, cantidad, new_price, new_client_id)
+            if new_order:
+                self.active_orders[new_client_id] = (new_side, cantidad, new_price, new_order['id'])
 
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
 
-    async def create_order(self, side, amount, price):
-        """Crea una nueva orden de compra o venta con un client order ID."""
+    async def create_order(self, side, amount, price, client_order_id):
+        """Crea una nueva orden con `client_order_id`."""
         try:
-            client_order_id = f"grid_{self.order_counter:04d}_{side}"  # ID único
-            self.order_counter += 1  # Incrementar contador
+            logging.info(f"Intentando crear orden: {side.upper()} {amount} @ {price} con ID {client_order_id}")
 
-            params = {'clOrdID': client_order_id, 'posSide': 'long'}  # Para OKX u otros exchanges compatibles
-
-            logging.info(f"Intentando crear orden: {side.upper()} {amount} @ {price} (ID: {client_order_id})")
-
-            order = await self.exchange.create_order(self.symbol, 'limit', side, amount, price, params=params)
+            order = await self.exchange.create_order(
+                self.symbol, 'limit', side, amount, price,
+                params={'posSide': 'long', 'clientOrderId': client_order_id}
+            )
 
             if order:
-                logging.info(f"Orden creada exitosamente: {side.upper()} {amount} @ {price}, ID: {order['id']}")
-                return {'id': order['id'], 'price': price, 'amount': amount, 'client_order_id': client_order_id}
+                logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID: {order['id']}")
+                return {'id': order['id'], 'price': price, 'amount': amount}
 
+            logging.warning(f"No se recibió respuesta de la orden {side.upper()} @ {price}")
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
 
-        return None
+        return None  
 
     async def place_orders(self, price):
-        """Coloca órdenes de compra en el grid y las almacena en SortedDict."""
+        """Coloca órdenes iniciales y asigna `client_order_id`."""
         try:
             prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
-            created_orders = 0  # Contador de órdenes creadas
 
-            for p in prices:
-                if created_orders >= self.num_orders:  # Evitar exceso de órdenes
-                    break
-
+            for i, p in enumerate(prices):
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
 
-                # Verificar si ya existe una orden en ese precio
-                if not any(val[2] == p for val in self.active_orders.values()):
-                    new_order = await self.create_order('buy', formatted_amount, p)
+                client_order_id = f"grid_{i:04d}_buy"
 
-                    if new_order:  # Solo contar si la orden se creó exitosamente
-                        created_orders += 1
-                        self.active_orders[new_order['client_order_id']] = ('buy', formatted_amount, new_order['price'], new_order['id'])
+                new_order = await self.create_order('buy', formatted_amount, p, client_order_id)
+
+                if new_order:
+                    self.active_orders[client_order_id] = ('buy', formatted_amount, p, new_order['id'])
 
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
