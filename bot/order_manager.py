@@ -43,23 +43,41 @@ class OrderManager:
             logging.error(f"Error procesando orden: {e}")
     
     async def create_order(self, side, amount, price):
-        """Crea una nueva orden de compra o venta y la almacena en SortedDict."""
+        """Crea una nueva orden de compra o venta y asegura que no se duplique."""
         try:
+            logging.info(f"Intentando crear orden: {side.upper()} {amount} @ {price}")
+
             order = await self.exchange.create_order(self.symbol, 'limit', side, amount, price, params={'posSide': 'long'})
-            logging.info(f"Orden creada: {side.upper()} {amount} @ {price}")
-            return {'id': order['id'], 'price': price, 'amount': amount}
+
+            if order:
+                logging.info(f"Orden creada exitosamente: {side.upper()} {amount} @ {price}, ID: {order['id']}")
+                return {'id': order['id'], 'price': price, 'amount': amount}
+            else:
+                logging.warning(f"No se recibió respuesta de la orden {side.upper()} @ {price}")
+
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
-            return None
+
+        return None  # Evitar que se cuenten órdenes fallidas
+
     
     async def place_orders(self, price):
-        """Coloca órdenes de compra o venta en el grid y las almacena en SortedDict."""
+        """Coloca órdenes de compra en el grid y las almacena en SortedDict."""
         try:
             prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
+            created_orders = 0  # Contador de órdenes creadas
+
             for p in prices:
+                if created_orders >= self.num_orders:  # Evitar exceso de órdenes
+                    break
+
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
-                await self.create_order('buy', formatted_amount, p)
-                
+                new_order = await self.create_order('buy', formatted_amount, p)
+
+                if new_order:  # Solo contar si la orden se creó exitosamente
+                    created_orders += 1
+
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
+
 
