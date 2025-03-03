@@ -35,7 +35,6 @@ class OrderManager:
     async def process_order(self, order):
         """Procesa una orden ejecutada y coloca una orden contraria."""
         try:
-            logging.info(f"Procesando orden ejecutada: {self.active_orders}")
 
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
@@ -72,12 +71,8 @@ class OrderManager:
             for p in prices:
                 if created_orders >= self.num_orders:  # Evitar exceso de órdenes
                     break
-
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
-
-                # Verificar si ya existe una orden en ese precio
-                if p not in self.active_orders:
-                     await self.create_order('buy', formatted_amount, p)
+                await self.create_order('buy', formatted_amount, p)
 
                    
 
