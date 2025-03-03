@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from sortedcontainers import SortedDict
 from bot.helpers import calculate_order_prices, format_quantity, format_price
 
 class OrderManager:
@@ -13,6 +14,8 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
         self.order_limit = 100  # Límite de órdenes abiertas permitidas
+
+        self.active_orders = SortedDict()  # {precio: (side, cantidad, id_orden)}
 
     async def check_orders(self):
         """Monitorea el estado de las órdenes en tiempo real con reconexión inteligente."""
@@ -35,6 +38,7 @@ class OrderManager:
     async def process_order(self, order):
         """Procesa una orden ejecutada y coloca una orden contraria."""
         try:
+            print(self.active_orders)
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
                 target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
@@ -76,6 +80,7 @@ class OrderManager:
 
                 if new_order:  # Solo contar si la orden se creó exitosamente
                     created_orders += 1
+                    self.active_orders[p] = ('buy', formatted_amount, new_order['id'])
 
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
