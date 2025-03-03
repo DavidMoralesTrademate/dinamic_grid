@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from bot.helpers import calculate_order_prices, format_quantity
+from bot.helpers import calculate_order_prices, format_quantity, format_price
 
 class OrderManager:
     def __init__(self, exchange, symbol, config):
@@ -37,7 +37,7 @@ class OrderManager:
         try:
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
-                target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
+                target_price = format_price(order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread), self.price_format)
                 await self.create_order(side, order['amount'], target_price)
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
