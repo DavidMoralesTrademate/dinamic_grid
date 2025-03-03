@@ -106,11 +106,19 @@ class OrderManager:
                 buy_orders = [o for o in open_orders if o['side'] == 'buy']
                 sell_orders = [o for o in open_orders if o['side'] == 'sell']
 
+
+                
                 num_buy_orders = len(buy_orders)
                 num_sell_orders = len(sell_orders)
                 total_open = num_buy_orders + num_sell_orders
 
                 net_pos = self.total_buys_filled - self.total_sells_filled  # compras llenadas - ventas llenadas
+
+                print('-'*20)
+                print(self.total_buys_filled, self.total_sells_filled)
+                print(self.total_buys_filled - self.total_sells_filled)
+                print('-'*20)
+                
                 max_sells_allowed = net_pos if net_pos > 0 else 0
 
                 logging.info(f"Rebalance - net_pos={net_pos}, buys_open={num_buy_orders}, sells_open={num_sell_orders}, total_open={total_open}")
