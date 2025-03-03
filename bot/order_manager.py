@@ -88,7 +88,7 @@ class OrderManager:
 
                     if new_order:  # Solo contar si la orden se creó exitosamente
                         created_orders += 1
-                        self.active_orders.setdefault(p, ('buy', formatted_amount, new_order['id']))
+                        self.active_orders.setdefault(new_order['price'], ('buy', formatted_amount, new_order['id']))
 
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
