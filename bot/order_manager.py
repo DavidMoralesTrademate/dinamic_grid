@@ -1,7 +1,6 @@
 import asyncio
 import logging
-from sortedcontainers import SortedDict
-from bot.helpers import calculate_order_prices, format_quantity
+from bot.helpers import calculate_order_prices_buy,calculate_order_prices_sell,  format_quantity
 
 class OrderManager:
     """
@@ -141,7 +140,7 @@ class OrderManager:
         se generará la venta correspondiente en process_order.
         """
         try:
-            prices = calculate_order_prices(
+            prices = calculate_order_prices_buy(
                 initial_price, 
                 self.percentage_spread, 
                 self.num_orders, 
@@ -202,7 +201,7 @@ class OrderManager:
             
 
             try:
-                prices = calculate_order_prices(
+                prices = calculate_order_prices_buy(
                     sorted_buys[0]['price'] * 1-self.percentage_spread, 
                     self.percentage_spread, 
                     diff, 
@@ -226,5 +225,36 @@ class OrderManager:
         if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders): 
             print('Puede que nececite mas ventas')
 
-            
+            sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
 
+            diff = (len(buy_orders) - len(sell_orders))
+            if diff >= net_pos:
+                diff = net_pos
+                
+            buys_to_cancel = sorted_buys[:diff]
+
+            # Cancelar esas buys
+            for s in buys_to_cancel:
+                await self.exchange.cancel_order(s['id'], self.symbol)
+
+            sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+
+            try:
+                prices = calculate_order_prices_sell(
+                    sorted_sells[0]['price'] * 1+self.percentage_spread, 
+                    self.percentage_spread, 
+                    diff, 
+                    self.price_format
+                )
+                count = 0
+                for p in prices:
+                    if count >= self.num_orders:
+                        break
+                    amt = format_quantity(
+                        self.amount / p / self.contract_size, 
+                        self.amount_format * 1-self.percentage_spread
+                    )
+                    await self.create_order('buy', amt, p)
+                    count += 1
+            except Exception as e:
+                logging.error(f"Error en place_orders: {e}")
