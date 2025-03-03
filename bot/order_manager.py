@@ -48,7 +48,7 @@ class OrderManager:
 
             if not client_id:
                 logging.warning(f"Orden ejecutada no encontrada en active_orders: {order['id']}")
-                return
+                
 
             side, cantidad, precio, _ = self.active_orders.pop(client_id)
 
