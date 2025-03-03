@@ -1,31 +1,119 @@
 import asyncio
 import logging
-from bot.helpers import calculate_order_prices, format_quantity
 from sortedcontainers import SortedDict
+from bot.helpers import calculate_order_prices, format_quantity
 
 class OrderManager:
     def __init__(self, exchange, symbol, config):
         self.exchange = exchange
         self.symbol = symbol
+
+        # Parámetros de configuración básicos de la estrategia
         self.percentage_spread = float(config['percentage_spread'])
         self.amount = float(config['amount'])
         self.num_orders = int(config['num_orders'])
         self.price_format = config.get('price_format')
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
-        self.half = self.num_orders // 2
 
+        # Contadores de órdenes llenas
         self.total_buys_filled = 0
         self.total_sells_filled = 0
+        self.total_profit_matches = 0.0  # profit estimado
 
+        # Lock (para cuando quieras hacer rebalances futuros)
         self._rebalance_lock = asyncio.Lock()
 
+        # Estructuras de datos
+        # - Diccionario principal: id => info de orden
+        # - SortedDict: key=price => set de order_ids
+        self.orders_by_id = {}
+        self.orders_by_price = SortedDict()
 
+    ### ------------------- Estructuras Locales de Órdenes -------------------
+    def _add_order_local(self, order):
+        """
+        Inserta la orden en nuestras estructuras (orders_by_id, orders_by_price).
+        order debe tener: 'id', 'side', 'price', 'amount', 'filled', 'status', ...
+        """
+        oid = order['id']
+        price = order['price']
+
+        # Guardamos la orden en el diccionario principal
+        self.orders_by_id[oid] = order
+
+        # Insertamos en el SortedDict por precio
+        if price not in self.orders_by_price:
+            self.orders_by_price[price] = set()
+        self.orders_by_price[price].add(oid)
+
+    def _remove_order_local(self, order):
+        """
+        Elimina la orden de nuestras estructuras, usando order['id'] y order['price'].
+        """
+        oid = order['id']
+        price = order['price']
+
+        # Borramos del diccionario principal
+        if oid in self.orders_by_id:
+            del self.orders_by_id[oid]
+
+        # Borramos del SortedDict
+        if price in self.orders_by_price:
+            s = self.orders_by_price[price]
+            if oid in s:
+                s.remove(oid)
+                if not s:  # Si se queda vacío
+                    del self.orders_by_price[price]
+
+    def _update_local_order(self, order):
+        """
+        Actualiza (o inserta) la orden en estructuras, según su estado.
+        """
+        oid = order.get('id')
+        price = order.get('price')
+        status = order.get('status', 'open')
+
+        if not oid or price is None:
+            return  # orden sin ID o sin precio => no insertamos en orders_by_price
+
+        # Si la tenemos, vemos si cambió de precio => la sacamos del old_price
+        existing = self.orders_by_id.get(oid)
+        if existing:
+            old_price = existing['price']
+            if old_price != price:
+                # remover del old_price
+                if old_price in self.orders_by_price:
+                    s = self.orders_by_price[old_price]
+                    if oid in s:
+                        s.remove(oid)
+                        if not s:
+                            del self.orders_by_price[old_price]
+                # actualizar
+                existing.update(order)
+                # reinsertar en la nueva price
+                if price not in self.orders_by_price:
+                    self.orders_by_price[price] = set()
+                self.orders_by_price[price].add(oid)
+            else:
+                # precio igual => solo actualizar campos
+                existing.update(order)
+        else:
+            # No existía => add
+            self._add_order_local(order)
+
+        self.orders_by_id[oid]['status'] = status
+
+    ### ------------------- Procesamiento de Updates del Exchange -------------------
     async def check_orders(self):
+        """
+        Bucle principal que escucha watch_orders y llama process_order
+        para cada actualización.
+        """
         reconnect_attempts = 0
         while True:
             try:
-                self.print_active_orders()
+                self.print_active_orders()  # imprime un resumen
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
@@ -34,178 +122,143 @@ class OrderManager:
                 reconnect_attempts = 0
             except Exception as e:
                 reconnect_attempts += 1
-                wait_time = min(2 ** reconnect_attempts, 60)
-                logging.error(f"Error en check_orders ({reconnect_attempts} intento): {e}")
+                wait_time = min(2**reconnect_attempts, 60)
+                logging.error(f"Error en check_orders (intento {reconnect_attempts}): {e}")
                 logging.info(f"Reintentando en {wait_time} segundos...")
                 await asyncio.sleep(wait_time)
 
     async def process_order(self, order):
+        """
+        process_order es llamado para cada update de 'watch_orders'.
+        Aquí decidimos si la orden se llenó, se canceló, etc., y
+        actualizamos nuestras estructuras + creamos la orden contraria si se llenó.
+        """
         try:
-            # Si se llenó completamente
-            if order.get('filled') == order.get('amount'):
-                side = order.get('side')
-                if side == 'buy':
-                    self.total_buys_filled += 1
-                else:
-                    self.total_sells_filled += 1
+            oid = order.get('id')
+            if not oid:
+                return
 
-                side_counter = 'sell' if side == 'buy' else 'buy'
-                spread_multiplier = (1 + self.percentage_spread) if side_counter == 'sell' else (1 - self.percentage_spread)
-                # Por seguridad, si no hay un price, evita multiplicar None
-                price = order.get('price')
-                if price is not None:
-                    target_price = price * spread_multiplier
-                    await self.create_order(side_counter, order['amount'], target_price)
-                    await self.rebalance_grid()
-                else:
-                    logging.warning(f"No se crea la contraria. La orden {order['id']} no tiene price.")
+            side = order.get('side')
+            price = order.get('price')
+            amount = order.get('amount', 0.0)
+            filled = order.get('filled', 0.0)
+            status = order.get('status')
+
+            if status in ('open', 'partially_filled'):
+                # Actualizamos en nuestras estructuras
+                self._update_local_order(order)
+
+            elif status in ('filled', 'closed'):
+                # Llenada completamente o cerrada
+                # chequeamos si (filled == amount), es la referencia para un fill total
+                if filled == amount and amount > 0.0:
+                    await self.on_order_filled(order)
+                # en ambos casos la removemos
+                self._remove_order_local(order)
+
+            elif status in ('canceled', 'expired', 'rejected'):
+                # Orden finalizada sin llenarse
+                self._remove_order_local(order)
+            else:
+                # Otros estados (ej. 'new', 'pending'), actualizamos
+                self._update_local_order(order)
+
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
 
+    async def on_order_filled(self, order):
+        """
+        Maneja la lógica cuando una orden se llena completamente.
+        """
+        side = order['side']
+        amount_filled = order['amount']
+        price_filled = order.get('price', None)
+
+        if side == 'buy':
+            self.total_buys_filled += 1
+        else:
+            self.total_sells_filled += 1
+            # Ganancia hipotética si asumes que cada venta produce un spread * self.amount
+            profit = self.amount * self.percentage_spread
+            self.total_profit_matches += profit
+
+        # Crear la orden contraria
+        if price_filled is not None:
+            side_counter = 'sell' if side == 'buy' else 'buy'
+            spread_multiplier = 1 + self.percentage_spread if side_counter == 'sell' else 1 - self.percentage_spread
+            new_price = price_filled * spread_multiplier
+            await self.create_order(side_counter, amount_filled, new_price)
+        else:
+            logging.warning(f"Orden {order['id']} se llenó sin price. No se crea la contraria.")
+
+    ### ------------------- Creación de Órdenes -------------------
     async def create_order(self, side, amount, price):
+        """
+        Crea una nueva orden 'limit' y la registra en nuestras estructuras
+        si el exchange la confirma.
+        """
         try:
-            params = {'posSide': 'long'}  # si usas Hedge Mode
-            order = await self.exchange.create_order(
-                self.symbol, 'limit', side, amount, price, params=params
-            )
-            if order:
-                logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID={order['id']}")
-                return order
+            params = {'posSide': 'long'}  # si estás en hedge mode
+            resp = await self.exchange.create_order(self.symbol, 'limit', side, amount, price, params=params)
+            if resp:
+                oid = resp['id']
+                logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID={oid}")
+                # Agregar a structures
+                # Llamamos un "skeleton" de order para guardarla
+                new_order_dict = {
+                    'id': oid,
+                    'side': side,
+                    'price': price,
+                    'amount': amount,
+                    'filled': 0.0,
+                    'status': 'open'
+                }
+                self._add_order_local(new_order_dict)
+                return resp
             else:
                 logging.warning(f"No se recibió respuesta en create_order: {side.upper()} {amount} @ {price}")
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
-        return None
 
     async def place_orders(self, price):
+        """
+        Método para colocar la grid estática inicial (todas ordenes de 'buy', p.ej.).
+        """
         try:
-            prices = calculate_order_prices(
-                price, 
-                self.percentage_spread, 
-                self.num_orders, 
-                self.price_format
-            )
-            created_orders = 0
+            prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
+            created = 0
             for p in prices:
-                if created_orders >= self.num_orders:
+                if created >= self.num_orders:
                     break
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
                 await self.create_order('buy', formatted_amount, p)
-                created_orders += 1
+                created += 1
         except Exception as e:
-            logging.error(f"Error colocando órdenes: {e}")
+            logging.error(f"Error al place_orders: {e}")
 
+    ### ------------------- Reporte en Pantalla -------------------
     def print_active_orders(self):
-        print(f"\n=== Numero de Match: {self.total_sells_filled}, Match profit: {self.total_sells_filled * (self.amount*self.percentage_spread) } ===")
+        """
+        Imprime contadores y un breve listado de las órdenes activas,
+        ordenadas por precio ascendente (gracias a sortedcontainers).
+        """
+        print("\n=== ESTADÍSTICAS DE MATCH ===")
+        print(f"  Buys llenas: {self.total_buys_filled}")
+        print(f"  Sells llenas: {self.total_sells_filled}")
+        print(f"  Profit estimado (spread): {self.total_profit_matches:.2f}")
+        print("=== Órdenes Activas ===")
 
-        print(f"maximo de ordenes de venta: {self.total_buys_filled - self.total_sells_filled}")
-
-        print("=== Fin de recuento ===\n")
-
-
-    async def rebalance_grid(self):
-        async with self._rebalance_lock:
-            try:
-                if self.total_buys_filled - self.total_sells_filled > self.num_orders/2:
-                    print(f"\n=== NECESITAMOS REVALANCEAR ===")
-
-                    print(f"NECESITAMOS REVALANCEAR")
-                    
-                    print("=== NECESITAMOS REVALANCEAR ===\n")
-                    return
-                else: return
-                
-                # buy_orders = [o for o in open_orders if o['side'] == 'buy']
-                # sell_orders = [o for o in open_orders if o['side'] == 'sell']
-
-                # num_buy_orders = len(buy_orders)
-                # num_sell_orders = len(sell_orders)
-
-                # net_pos = self.total_buys_filled - self.total_sells_filled
-                # max_sells_allowed = max(net_pos, 0)
-
-                # # Determinamos cuántas SELL queremos en total
-                # # Ejemplo 50:50:
-                # half = self.num_orders // 2
-                # desired_sell = min(half, max_sells_allowed)
-                # desired_buy = self.num_orders - desired_sell
-
-                # logging.info(f"[Rebalance] net_pos={net_pos}, buys_open={num_buy_orders}, sells_open={num_sell_orders}")
-                # logging.info(f"[Rebalance] desired_buy={desired_buy}, desired_sell={desired_sell}")
-                # logging.info(f"[Rebalance] num_buy_orders={self.total_buys_filled}, num_sell_orders={self.total_sells_filled}, num_will_orders_sell={net_pos}")
-
-                # # Ajustar SELL al desired_sell
-                # if num_sell_orders > desired_sell:
-                #     print('ya podemos empezar a cancelar')
-                #     # Cancelar las que sobran
-                #     excess = num_sell_orders - desired_sell
-                #     print('el exeso es ', excess)
-                #     # Criterio: cancelar las + lejanas del precio ejecutado
-                #     # (puedes cambiar a 'reverse=True' si quieres cancelar las + caras primero)
-                    
-                #     sell_orders_sorted = sorted(
-                #         sell_orders, 
-                #         key=lambda o: abs(o['price']),
-                #         reverse=True
-                #     )
-
-                #     print('ordenadas las ordenes de venta ', sell_orders_sorted)
-                #     for i in range(excess):
-                #         if i < len(sell_orders_sorted):
-                #             to_cancel = sell_orders_sorted[i]
-                #             try:
-                #                 await self.exchange.cancel_order(to_cancel['id'], self.symbol)
-                #                 logging.info(f"[Rebalance] Cancelada SELL {to_cancel['id']} @ {to_cancel['price']}")
-                #             except Exception as e:
-                #                 logging.error(f"Error cancelando SELL {to_cancel['id']}: {e}")
-
-                    
-                # elif num_sell_orders < desired_sell:
-                #     # Falta crear SELL
-                #     missing = desired_sell - num_sell_orders
-                #     current_price = executed_order['price']
-                #     for i in range(missing):
-                #         new_sell_price = current_price * (1 + self.percentage_spread*(i+1))
-                #         amount = executed_order['amount']
-                #         created = await self.create_order('sell', amount, new_sell_price)
-                #         if created:
-                #             logging.info(f"[Rebalance] SELL creada @ {new_sell_price} para completar {desired_sell}")
-
-                # # Ajustar BUY al desired_buy (luego de modificar SELL)
-                # open_orders = await self.exchange.fetch_open_orders(self.symbol)
-                # buy_orders = [o for o in open_orders if o['side'] == 'buy']
-                # sell_orders = [o for o in open_orders if o['side'] == 'sell']
-                # num_buy_orders = len(buy_orders)
-                # num_sell_orders = len(sell_orders)
-
-                # if num_buy_orders > desired_buy:
-                #     # Cancelar las que sobran
-                #     excess = num_buy_orders - desired_buy
-                #     current_price = executed_order['price']
-                #     buy_orders_sorted = sorted(
-                #         buy_orders,
-                #         key=lambda o: abs(o['price'] - current_price),
-                #         reverse=True
-                #     )
-                #     for i in range(excess):
-                #         if i < len(buy_orders_sorted):
-                #             to_cancel = buy_orders_sorted[i]
-                #             try:
-                #                 await self.exchange.cancel_order(to_cancel['id'], self.symbol)
-                #                 logging.info(f"[Rebalance] Cancelada BUY {to_cancel['id']} @ {to_cancel['price']}")
-                #             except Exception as e:
-                #                 logging.error(f"Error cancelando BUY {to_cancel['id']}: {e}")
-                # elif num_buy_orders < desired_buy:
-                #     # Falta crear BUY
-                #     missing = desired_buy - num_buy_orders
-                #     current_price = executed_order['price']
-                #     for i in range(missing):
-                #         new_buy_price = current_price * (1 - self.percentage_spread*(i+1))
-                #         amount = executed_order['amount']
-                #         created = await self.create_order('buy', amount, new_buy_price)
-                #         if created:
-                #             logging.info(f"[Rebalance] BUY creada @ {new_buy_price} para completar {desired_buy}")
-
-                logging.info("[Rebalance] Finalizado el rebalance.")
-            except Exception as e:
-                logging.error(f"Error en el rebalanceo de la grid: {e}")
+        if not self.orders_by_id:
+            print("  No hay órdenes activas registradas.")
+        else:
+            # Recorremos la estructura sorted por price
+            for price in self.orders_by_price.keys():
+                ids_con_ese_precio = self.orders_by_price[price]
+                for oid in ids_con_ese_precio:
+                    od = self.orders_by_id.get(oid, {})
+                    side = od.get('side','?')
+                    st = od.get('status','?')
+                    filled = od.get('filled',0.0)
+                    amt = od.get('amount',0.0)
+                    print(f"    Price={price}, ID={oid}, side={side}, status={st}, amount={amt}, filled={filled}")
+        print("=== FIN ===\n")
