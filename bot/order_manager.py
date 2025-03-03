@@ -175,6 +175,7 @@ class OrderManager:
     async def rebalance(self):
 
         open_orders = await self.exchange.fetch_open_orders(self.symbol)
+        net_pos = self.total_buys_filled - self.total_sells_filled
 
         buy_orders = [o for o in open_orders if o['side'] == 'buy']
         sell_orders = [o for o in open_orders if o['side'] == 'sell']
@@ -186,4 +187,10 @@ class OrderManager:
         # rebalancear compras
         if len(sell_orders) > len(buy_orders) + 1*1: 
             print('necesitamos cancelar ventas y poner compras')
+
+        # rebalancear ventas
+        if len(buy_orders) > len(sell_orders) + 1*1 and net_pos > len(sell_orders): 
+            print('Puede que nececite mas ventas')
+
+            
 
