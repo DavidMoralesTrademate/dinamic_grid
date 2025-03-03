@@ -20,6 +20,7 @@ class OrderManager:
         self.total_sells_filled = 0
         self.match_profit = 0.0  # Ganancia estimada en cada venta
 
+
     ### -------------------------------------------------
     ###       Lógica Principal de watch_orders
     ### -------------------------------------------------
@@ -59,7 +60,7 @@ class OrderManager:
             status = order.get('status')
 
             # Revisar si se llenó: 
-            if status in ('filled') and filled == amount and amount > 0.0:
+            if status in ('filled','closed') and filled == amount and amount > 0.0:
 
                 # Actualizar contadores
                 if side == 'buy':
