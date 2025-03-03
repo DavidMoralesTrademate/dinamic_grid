@@ -12,6 +12,8 @@ class OrderManager:
         self.price_format = config.get('price_format')
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
+        # Lock para evitar rebalanceos concurrentes
+        self._rebalance_lock = asyncio.Lock()
 
     async def check_orders(self):
         """Monitorea el estado de las órdenes en tiempo real con reconexión inteligente."""
@@ -22,7 +24,7 @@ class OrderManager:
                 if not orders:
                     continue
                 for order in orders:
-                    # Procesar cada orden de forma concurrente.
+                    # Procesa cada orden de forma concurrente.
                     asyncio.create_task(self.process_order(order))
                 reconnect_attempts = 0
             except Exception as e:
@@ -33,16 +35,16 @@ class OrderManager:
                 await asyncio.sleep(wait_time)
 
     async def process_order(self, order):
-        """Procesa una orden ejecutada, coloca la orden contraria y rebalancea la grid."""
+        """Procesa una orden ejecutada, coloca la orden contraria y llama al rebalanceo."""
         try:
             if order['filled'] == order['amount']:
-                # Colocar orden contraria: si se llenó una orden de compra, se coloca la de venta, y viceversa.
+                # Colocar la orden contraria: si se llenó una orden de compra, se coloca la de venta, y viceversa.
                 side_counter = 'sell' if order['side'] == 'buy' else 'buy'
                 spread_multiplier = 1 + self.percentage_spread if side_counter == 'sell' else 1 - self.percentage_spread
                 target_price = order['price'] * spread_multiplier
                 await self.create_order(side_counter, order['amount'], target_price)
                 
-                # Rebalancear la grid de forma dinámica.
+                # Llamar al rebalanceo dinámico.
                 await self.rebalance_grid(order)
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
@@ -77,70 +79,64 @@ class OrderManager:
 
     async def rebalance_grid(self, executed_order):
         """
-        Rebalancea la grid dinámicamente tras que una orden se ejecute por completo.
+        Rebalancea la grid dinámicamente cuando una orden se ejecuta completamente.
         
-        - Si la orden ejecutada es de compra (mercado bajista):
-            * Cancela órdenes de compra con precio mayor o igual al precio ejecutado.
-            * Consulta cuántas órdenes de compra quedan activas y crea solo las que faltan,
-              colocándolas por debajo del precio más bajo actual.
+        Para el lado de compra:
+          - Se cancelan las órdenes de compra que tengan precio mayor o igual que el precio ejecutado.
+          - Se consulta cuántas órdenes de compra quedan activas y se crean únicamente las que falten,
+            ubicándolas por debajo del precio más bajo actual, evitando duplicados.
         
-        - Si la orden ejecutada es de venta (mercado alcista):
-            * Cancela órdenes de venta con precio menor o igual al precio ejecutado.
-            * Consulta cuántas órdenes de venta quedan activas y crea solo las que faltan,
-              colocándolas por encima del precio más alto actual.
+        Para el lado de venta:
+          - Se cancelan las órdenes de venta con precio menor o igual que el precio ejecutado.
+          - No se crean nuevas órdenes de venta aquí para evitar errores de posición;
+            la orden contraria ya se coloca en process_order.
         """
-        try:
-            # Obtener órdenes abiertas actuales.
-            open_orders = await self.exchange.fetch_open_orders(self.symbol)
-            if executed_order['side'] == 'buy':
-                # Orden de compra ejecutada: se asume que el precio bajó.
-                new_base = executed_order['price']
-                # Cancelar órdenes de compra que estén por encima o iguales a new_base.
-                buy_orders = [o for o in open_orders if o['side'] == 'buy']
-                for order in buy_orders:
-                    if order['price'] >= new_base:
-                        try:
-                            await self.exchange.cancel_order(order['id'], self.symbol)
-                            logging.info(f"Cancelada orden de compra en {order['price']} fuera del nuevo grid.")
-                        except Exception as cancel_error:
-                            logging.error(f"Error cancelando orden de compra {order['id']}: {cancel_error}")
-                # Actualizar órdenes abiertas.
+        async with self._rebalance_lock:
+            try:
                 open_orders = await self.exchange.fetch_open_orders(self.symbol)
-                buy_orders = [o for o in open_orders if o['side'] == 'buy']
-                current_buy_count = len(buy_orders)
-                missing_buy = self.num_orders - current_buy_count
-                if missing_buy > 0:
-                    # Usar el precio más bajo de las órdenes de compra actuales o new_base si no hay.
-                    lowest_buy = min([o['price'] for o in buy_orders]) if buy_orders else new_base
-                    # Crear solo las órdenes que falten.
-                    for i in range(1, missing_buy + 1):
-                        new_price = lowest_buy - i * self.percentage_spread
-                        formatted_amount = format_quantity(self.amount / new_price / self.contract_size, self.amount_format)
-                        await self.create_order('buy', formatted_amount, new_price)
-                        logging.info(f"Nueva orden de compra colocada en {new_price} para rebalancear grid.")
-            elif executed_order['side'] == 'sell':
-                # Orden de venta ejecutada: se asume que el precio subió.
-                new_base = executed_order['price']
-                # Cancelar órdenes de venta que estén por debajo o iguales a new_base.
-                sell_orders = [o for o in open_orders if o['side'] == 'sell']
-                for order in sell_orders:
-                    if order['price'] <= new_base:
-                        try:
-                            await self.exchange.cancel_order(order['id'], self.symbol)
-                            logging.info(f"Cancelada orden de venta en {order['price']} fuera del nuevo grid.")
-                        except Exception as cancel_error:
-                            logging.error(f"Error cancelando orden de venta {order['id']}: {cancel_error}")
-                # Actualizar órdenes abiertas.
-                open_orders = await self.exchange.fetch_open_orders(self.symbol)
-                sell_orders = [o for o in open_orders if o['side'] == 'sell']
-                current_sell_count = len(sell_orders)
-                missing_sell = self.num_orders - current_sell_count
-                if missing_sell > 0:
-                    highest_sell = max([o['price'] for o in sell_orders]) if sell_orders else new_base
-                    for i in range(1, missing_sell + 1):
-                        new_price = highest_sell + i * self.percentage_spread
-                        formatted_amount = format_quantity(self.amount / new_price / self.contract_size, self.amount_format)
-                        await self.create_order('sell', formatted_amount, new_price)
-                        logging.info(f"Nueva orden de venta colocada en {new_price} para rebalancear grid.")
-        except Exception as e:
-            logging.error(f"Error en el rebalanceo de la grid: {e}")
+                if executed_order['side'] == 'buy':
+                    # Caso: orden de compra ejecutada (mercado bajista)
+                    new_base = executed_order['price']
+                    # Cancelar órdenes de compra con precio mayor o igual a new_base.
+                    buy_orders = [o for o in open_orders if o['side'] == 'buy']
+                    for order in buy_orders:
+                        if order['price'] >= new_base:
+                            try:
+                                await self.exchange.cancel_order(order['id'], self.symbol)
+                                logging.info(f"Cancelada orden de compra en {order['price']} fuera del nuevo grid.")
+                            except Exception as cancel_error:
+                                logging.error(f"Error cancelando orden de compra {order['id']}: {cancel_error}")
+                    # Actualizar órdenes abiertas.
+                    open_orders = await self.exchange.fetch_open_orders(self.symbol)
+                    buy_orders = [o for o in open_orders if o['side'] == 'buy']
+                    current_buy_prices = {o['price'] for o in buy_orders}
+                    current_buy_count = len(buy_orders)
+                    missing_buy = self.num_orders - current_buy_count
+                    if missing_buy > 0:
+                        lowest_buy = min([o['price'] for o in buy_orders]) if buy_orders else new_base
+                        # Crear solo las órdenes que falten, verificando que no se dupliquen.
+                        for i in range(1, missing_buy + 1):
+                            candidate_price = lowest_buy - i * self.percentage_spread
+                            if candidate_price not in current_buy_prices:
+                                formatted_amount = format_quantity(
+                                    self.amount / candidate_price / self.contract_size, self.amount_format
+                                )
+                                await self.create_order('buy', formatted_amount, candidate_price)
+                                logging.info(f"Nueva orden de compra colocada en {candidate_price} para rebalancear grid.")
+                                current_buy_prices.add(candidate_price)
+                elif executed_order['side'] == 'sell':
+                    # Caso: orden de venta ejecutada (mercado alcista)
+                    new_base = executed_order['price']
+                    sell_orders = [o for o in open_orders if o['side'] == 'sell']
+                    for order in sell_orders:
+                        if order['price'] <= new_base:
+                            try:
+                                await self.exchange.cancel_order(order['id'], self.symbol)
+                                logging.info(f"Cancelada orden de venta en {order['price']} fuera del nuevo grid.")
+                            except Exception as cancel_error:
+                                logging.error(f"Error cancelando orden de venta {order['id']}: {cancel_error}")
+                    # Para evitar errores de posición, no se crean nuevas órdenes de venta aquí;
+                    # se asume que la orden contraria ya se colocó en process_order.
+                    logging.info("No se crean nuevas órdenes de venta en rebalanceo para evitar cerrar posiciones inexistentes.")
+            except Exception as e:
+                logging.error(f"Error en el rebalanceo de la grid: {e}")
