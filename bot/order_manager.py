@@ -54,6 +54,7 @@ class OrderManager:
     async def create_order(self, side, amount, price):
         """Crea una nueva orden de compra o venta y la registra, evitando duplicados."""
         try:
+            await self.update_grid_prices()
             open_orders = await self.exchange.fetch_open_orders(self.symbol)
             existing_prices = {float(order['price']) for order in open_orders}
             
@@ -68,6 +69,17 @@ class OrderManager:
             logging.info(f"Orden creada: {side.upper()} {formatted_amount} @ {price}")
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
+    
+    async def update_grid_prices(self):
+        """Actualiza el precio más bajo y más alto del grid."""
+        try:
+            open_orders = await self.exchange.fetch_open_orders(self.symbol)
+            if open_orders:
+                prices = [float(order['price']) for order in open_orders]
+                self.lowest_order_price = min(prices)
+                self.highest_order_price = max(prices)
+        except Exception as e:
+            logging.error(f"Error actualizando grid prices: {e}")
     
     async def maintain_orders(self):
         """Mantiene siempre el número correcto de órdenes activas sin huecos y sin exceder el límite."""
@@ -84,32 +96,3 @@ class OrderManager:
                 await self.clean_far_orders()
         except Exception as e:
             logging.error(f"Error en maintain_orders: {e}")
-    
-    async def clean_far_orders(self):
-        """Elimina las órdenes más alejadas y las guarda para reponerlas después."""
-        try:
-            open_orders = await self.exchange.fetch_open_orders(self.symbol)
-            if open_orders:
-                orders_sorted = sorted(open_orders, key=lambda x: float(x['price']))
-                excess_orders = len(open_orders) - self.num_orders
-                for order in orders_sorted[:excess_orders]:
-                    await self.exchange.cancel_order(order['id'], self.symbol)
-                    self.removed_orders.append(order['price'])
-                    logging.info(f"Orden cancelada y guardada: {order['id']} @ {order['price']}")
-        except Exception as e:
-            logging.error(f"Error en clean_far_orders: {e}")
-    
-    async def place_orders(self, price):
-        """Coloca órdenes de compra en el grid asegurando que sigan al precio y evitando duplicados."""
-        try:
-            open_orders = await self.exchange.fetch_open_orders(self.symbol)
-            existing_prices = {float(order['price']) for order in open_orders}
-            
-            if price is None:
-                price = await self.get_current_price()
-            
-            new_prices = calculate_order_prices(price, self.percentage_spread, self.num_orders - len(open_orders), self.price_format)
-            tasks = [self.create_order('buy', self.amount, p) for p in new_prices if p not in existing_prices]
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception as e:
-            logging.error(f"Error colocando órdenes: {e}")
