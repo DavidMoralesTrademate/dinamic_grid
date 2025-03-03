@@ -53,6 +53,8 @@ class OrderManager:
     
     async def place_orders(self, price):
         """Coloca órdenes de compra o venta en el grid."""
+        if not self.all_ok:
+            self.all_ok = True 
         try:
             prices = calculate_order_prices(price, self.percentage_spread, self.num_orders, self.price_format)
             tasks = [self.create_order('buy', self.amount, p) for p in prices]
