@@ -54,8 +54,7 @@ class BotMain:
                 
                 resp = await self.exchange.watch_bids_asks([self.symbol])
                 self.price = float((resp[self.symbol]['bid'] + resp[self.symbol]['ask']) / 2)
-                logging.info(f"Precio actualizado: {self.price}")
-                reconnect_attempts = 0  # Resetear intentos si hay éxito
+                reconnect_attempts = 0 
             except Exception as e:
                 reconnect_attempts += 1
                 wait_time = min(2 ** reconnect_attempts, 60)  # Backoff exponencial
