@@ -59,8 +59,7 @@ class OrderManager:
             for p in prices:
                 formatted_amount = format_quantity(self.amount / p / self.contract_size, self.amount_format)
                 order = await self.create_order('buy', formatted_amount, p)
-                if order:
-                    self.active_orders[p] = (self.amount, order['id'])
+                
         except Exception as e:
             logging.error(f"Error colocando órdenes: {e}")
 
