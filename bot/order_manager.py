@@ -37,12 +37,11 @@ class OrderManager:
         try:
             if order['filled'] == order['amount']:
                 side = 'sell' if order['side'] == 'buy' else 'buy'
-                target_price = format_price(
-                    order['price'] * (1 - self.percentage_spread if side == 'sell' else 1 + self.percentage_spread),
-                    self.price_format
-                )
-
+                target_price = order['price'] * (1 + self.percentage_spread if side == 'sell' else 1 - self.percentage_spread)
                 await self.create_order(side, order['amount'], target_price)
+                
+                #
+                await self.maintain_orders()
         except Exception as e:
             logging.error(f"Error procesando orden: {e}")
     
