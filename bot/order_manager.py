@@ -50,7 +50,7 @@ class OrderManager:
         reconnect_attempts = 0
         while True:
             try:
-                #self.print_stats()  # Imprime contadores y estado
+                self.print_stats()  # Imprime contadores y estado
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
@@ -165,9 +165,11 @@ class OrderManager:
         Imprime un resumen de contadores cada vez que se llama (en check_orders).
         """
         print("\n=== Grid Alcista Stats ===")
-        print(f"  Buys llenas: {self.total_buys_filled}")
-        print(f"  Sells llenas: {self.total_sells_filled}")
-        print(f"  Profit estimado (spread): {self.match_profit:.4f}")
+        print(f"  Volumen: {self.total_buys_filled + self.total_sells_filled * self.amount}")
+        print(f"  Total de compras: {self.total_buys_filled}")
+        print(f"  Numero de Matchs: {self.total_sells_filled}")
+        print(f"  Match profit: {self.match_profit:.4f}")
+        print(f"  fee Aprox: {self.total_buys_filled + self.total_sells_filled * self.amount * 0.002}")
         print("=== Fin de Stats ===\n")
 
 
