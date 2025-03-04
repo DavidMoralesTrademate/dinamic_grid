@@ -169,7 +169,7 @@ class OrderManager:
         print(f"  Total de compras: {self.total_buys_filled}")
         print(f"  Numero de Matchs: {self.total_sells_filled}")
         print(f"  Match profit: {self.match_profit:.4f}")
-        print(f"  fee Aprox: {self.total_buys_filled + self.total_sells_filled * self.amount * 0.002}")
+        print(f"  fee Aprox: {self.total_buys_filled + self.total_sells_filled * self.amount * 0.00002}")
         print("=== Fin de Stats ===\n")
 
 
