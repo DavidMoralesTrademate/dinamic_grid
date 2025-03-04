@@ -40,7 +40,7 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = 200
+        self.total_buys_filled = 100
         self.total_sells_filled = 0
         self.match_profit = 0.0
 
@@ -251,7 +251,7 @@ class OrderManager:
             if net_pos == num_sells:
                 logging.info("[Rebalance] net_pos == sells. No hay margen para más ventas.")
             else:
-                raw_diff = num_buys - num_sells
+                raw_diff = (num_buys - num_sells )/ 2
                 capacidad_ventas = net_pos - num_sells
                 diff = min(raw_diff, capacidad_ventas, max_diff)
                 if diff <= 0:
