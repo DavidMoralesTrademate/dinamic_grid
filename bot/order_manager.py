@@ -1,3 +1,5 @@
+import datetime
+import motor.motor_asyncio
 import asyncio
 import logging
 from bot.helpers import (
@@ -28,6 +30,8 @@ class OrderManager:
         """
         self.exchange = exchange
         self.symbol = symbol
+        self.account = config.get('account')
+        self.exchange_name = config.get('exchange_name')
 
         self.percentage_spread = float(config['percentage_spread'])
         self.amount = float(config['amount'])
@@ -39,6 +43,8 @@ class OrderManager:
         self.total_buys_filled = 0
         self.total_sells_filled = 0
         self.match_profit = 0.0
+
+        
 
     async def check_orders(self):
         """
@@ -342,3 +348,35 @@ class OrderManager:
                     logging.error(f"Error cancelando orden extra {o['id']}: {e}")
 
         logging.info("[Rebalance] Finalizó la ejecución.")
+
+
+    async def data_send(self):
+        # Cadena de conexión a MongoDB Atlas (ajústala si es necesario)
+        mongo_uri = "mongodb+srv://trademate:n4iTxStjWPyPSDHl@cluster0.uxsok.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+        client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
+        db = client["Grid"]
+        collection = db["Match Profit"]
+
+        # Definir el filtro único para identificar el documento (por ejemplo, por exchange, account y crypto_pair)
+        filter_doc = {
+            "exchange": self.exchange_name,
+            "account": self.account,
+            "crypto_pair": self.symbol,
+        }
+
+        # Datos a actualizar (o insertar si no existe)
+        data = {
+            "timestamp": datetime.datetime.utcnow(),
+            "match_profit": self.match_profit,
+            "number_of_matches": self.total_sells_filled,
+            "net_position": self.total_buys_filled - self.total_sells_filled,
+            "total_volume": (self.total_buys_filled + self.total_sells_filled) * self.amount,
+        }
+
+        update_doc = {"$set": data}
+
+        try:
+            result = await collection.update_one(filter_doc, update_doc, upsert=True)
+            logging.info(f"Datos actualizados en MongoDB, resultado: {result.raw_result}")
+        except Exception as e:
+            logging.error(f"Error actualizando datos en MongoDB: {e}")

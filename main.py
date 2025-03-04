@@ -6,6 +6,8 @@ CONFIG = {
         'secret': 'EFA0EC41AC7C2393579A84A1DBD67D05', 
         'password': 'Bitcoin1.',
     },
+    'exchange_name':'OKX',
+    'account':'dm0012', 
     'symbols': ['ETH/USDT:USDT'],
     'amount': 10,
     'percentage_spread': 0.0005,
