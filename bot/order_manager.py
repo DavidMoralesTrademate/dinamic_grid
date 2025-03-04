@@ -1,14 +1,17 @@
 import asyncio
 import logging
-import math
-from bot.helpers import calculate_order_prices_buy,calculate_order_prices_sell,  format_quantity
+from bot.helpers import (
+    calculate_order_prices_buy,
+    calculate_order_prices_sell,
+    format_quantity
+)
 
 class OrderManager:
     """
     Bot de 'grid alcista' estático:
-      - Al iniciar, coloca únicamente órdenes de compra escalonadas por debajo de un precio inicial.
+      - Coloca inicialmente únicamente órdenes de compra escalonadas por debajo de un precio.
       - Cuando se llena una orden de compra, crea la orden de venta contraria (y viceversa).
-      - Guarda contadores de compras/ventas llenas y un profit estimado por cada venta completada.
+      - Lleva contadores de órdenes llenas (match) y un profit estimado.
     """
     def __init__(self, exchange, symbol, config):
         """
@@ -26,7 +29,6 @@ class OrderManager:
         self.exchange = exchange
         self.symbol = symbol
 
-        # Extrae configuración
         self.percentage_spread = float(config['percentage_spread'])
         self.amount = float(config['amount'])
         self.num_orders = int(config['num_orders'])
@@ -34,117 +36,95 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        # Contadores de órdenes llenas
         self.total_buys_filled = 0
         self.total_sells_filled = 0
-
-        # Ganancia estimada, asumiendo que cada venta produce spread * amount
         self.match_profit = 0.0
 
     async def check_orders(self):
         """
-        Bucle principal que escucha las actualizaciones de órdenes vía watch_orders.
-        Cada vez que detecta una orden 'filled' o 'closed' con amount == filled,
-        llama a process_order para manejar la lógica de compra/venta contraria.
+        Escucha actualizaciones de órdenes a través de watch_orders y procesa cada una.
         """
         reconnect_attempts = 0
         while True:
             try:
-                self.print_stats()  # Imprime contadores y estado
+                self.print_stats()
                 orders = await self.exchange.watch_orders(self.symbol)
                 if not orders:
                     continue
-
                 for o in orders:
                     await self.process_order(o)
-
                 reconnect_attempts = 0
-
             except Exception as e:
                 reconnect_attempts += 1
-                wait_time = min(2**reconnect_attempts, 60)
+                wait_time = min(2 ** reconnect_attempts, 60)
                 logging.error(f"Error en check_orders (intento {reconnect_attempts}): {e}")
                 logging.info(f"Reintentando en {wait_time} seg...")
                 await asyncio.sleep(wait_time)
 
     async def process_order(self, order: dict):
         """
-        Procesa cada actualización de orden.
-        Si la orden se llenó por completo (status in ('filled','closed') y filled == amount),
-        incrementa el contador correspondiente y crea la orden contraria.
+        Si la orden se llenó completamente (status en ('filled','closed') y filled == amount),
+        actualiza los contadores y crea la orden contraria.
         """
         try:
             oid = order.get('id')
             if not oid:
-                return  # No hay ID => no podemos procesar
-
-            side = order.get('side')          # 'buy' o 'sell'
-            price = order.get('price', None)  # precio al que se ejecutó la orden
+                return
+            side = order.get('side')
+            price = order.get('price', None)
             amount = float(order.get('amount', 0.0))
             filled = float(order.get('filled', 0.0))
-            status = order.get('status')      # 'open', 'closed', 'filled', etc.
-
-            # Si la orden se llenó completamente
+            status = order.get('status')
             if status in ('filled', 'closed') and filled == amount and amount > 0.0:
-                # Actualizamos contadores
                 if side == 'buy':
                     self.total_buys_filled += 1
-                    # Crea la venta contraria
                     if price is not None:
                         sell_price = price * (1 + self.percentage_spread)
                         await self.create_order('sell', filled, sell_price)
                     else:
                         logging.warning(f"Omitida venta para la orden buy {oid} por falta de price.")
-                else:  # side == 'sell'
+                else:
                     self.total_sells_filled += 1
-                    # Ganancia estimada
                     self.match_profit += (self.amount * self.percentage_spread)
-                    # Crea la compra contraria
                     if price is not None:
                         buy_price = price * (1 - self.percentage_spread)
                         await self.create_order('buy', filled, buy_price)
                     else:
                         logging.warning(f"Omitida compra para la orden sell {oid} por falta de price.")
-
         except Exception as e:
             logging.error(f"Error en process_order: {e}")
 
     async def create_order(self, side: str, amount: float, price: float):
         """
-        Crea una nueva orden limit. No se guarda en estructuras locales,
-        pues la idea es un grid estático (se confía en watch_orders para updates).
+        Crea una orden limit usando create_order del exchange.
         """
         try:
-            params = {'posSide': 'long'}  # Hedge Mode (OKX), ajusta si deseas 'short'
+            params = {'posSide': 'long'}
             resp = await self.exchange.create_order(
-                self.symbol, 
-                'limit', 
-                side, 
-                amount, 
-                price, 
+                self.symbol,
+                'limit',
+                side,
+                amount,
+                price,
                 params=params
             )
             if resp:
-                # Sólo logueamos
                 oid = resp['id']
                 logging.info(f"Orden creada: {side.upper()} {amount} @ {price}, ID={oid}")
             else:
                 logging.warning(f"No se recibió respuesta en create_order: {side} {amount} @ {price}")
-
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
 
     async def place_orders(self, initial_price: float):
         """
-        Coloca un grid 'alcista' inicial: únicamente órdenes de compra escalonadas
-        por debajo de initial_price. Posteriormente, cada vez que una compra se llene,
-        se generará la venta correspondiente en process_order.
+        Coloca la grid inicial de órdenes de compra por debajo de initial_price.
         """
         try:
             prices = calculate_order_prices_buy(
-                initial_price, 
-                self.percentage_spread, 
-                self.num_orders, 
+                initial_price,
+                self.percentage_spread,
+                self.num_orders,
                 self.price_format
             )
             count = 0
@@ -152,7 +132,7 @@ class OrderManager:
                 if count >= self.num_orders:
                     break
                 amt = format_quantity(
-                    self.amount / p / self.contract_size, 
+                    self.amount / p / self.contract_size,
                     self.amount_format
                 )
                 await self.create_order('buy', amt, p)
@@ -161,12 +141,12 @@ class OrderManager:
             logging.error(f"Error en place_orders: {e}")
 
     def print_stats(self):
-        # Net position: compras llenas menos ventas llenas
+        """
+        Imprime un resumen de la actividad del grid: volumen, contadores, net position, profit y fee aproximado.
+        """
         net_pos = self.total_buys_filled - self.total_sells_filled
-        # Volumen total: suma de todas las órdenes (compras + ventas) multiplicado por el tamaño de la orden
         total_volume = (self.total_buys_filled + self.total_sells_filled) * self.amount
-        # Fee aproximado: se aplica la tasa (0.002% = 0.00002) al volumen total
-        fee_approx = total_volume * 0.00002
+        fee_approx = total_volume * 0.00002  # 0.002% = 0.00002
 
         print("\n=== Grid Alcista Stats ===")
         print(f"  Volumen Total: {total_volume}")
@@ -177,10 +157,14 @@ class OrderManager:
         print(f"  Fee Aproximado: {fee_approx:.4f}")
         print("=== Fin de Stats ===\n")
 
-
-
     async def rebalance(self):
-    # 1) Obtener las órdenes abiertas y calcular net_pos
+        """
+        Rebalancea el grid de órdenes. Primero obtiene las órdenes abiertas y calcula
+        la diferencia entre compras y ventas, y el net_pos. Luego:
+          1) Si hay demasiadas ventas (sells > buys * 1.1), cancela algunas ventas y crea compras.
+          2) Si hay demasiadas compras (buys > sells * 1.1) y el net_pos permite más ventas, cancela algunas compras y crea ventas.
+          3) Finalmente, se asegura de tener exactamente self.num_orders órdenes abiertas, creando órdenes extra si es necesario.
+        """
         open_orders = await self.exchange.fetch_open_orders(self.symbol)
         net_pos = self.total_buys_filled - self.total_sells_filled
 
@@ -193,24 +177,22 @@ class OrderManager:
 
         logging.info(f"[Rebalance] total_open={total_open}, buy_orders={num_buys}, sell_orders={num_sells}, net_pos={net_pos}")
 
+        # Limite máximo de órdenes a modificar en un ciclo: 25% del total
+        max_diff = max(1, self.num_orders // 4)
+
         # --------------------------------------------------------------------
-        # 1) Rebalancear COMPRAS: Si hay más SELL que BUY, cancelar algunas SELL y crear BUY
+        # 1) Rebalancear COMPRAS: Si hay más SELL que BUY (más de 10% de diferencia)
         # --------------------------------------------------------------------
         if num_sells > num_buys * 1.1:
             logging.info("[Rebalance] Necesitamos cancelar ventas y poner compras")
-            
             sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
-            diff = num_sells - num_buys
+            raw_diff = num_sells - num_buys
+            diff = min(raw_diff, max_diff)
             if diff <= 0:
                 logging.info("[Rebalance] diff <= 0, nada que cancelar ni crear en compras.")
             else:
-                if diff > self.num_orders // 2:
-                    diff = self.num_orders // 2
-
-                sells_to_cancel = sorted_sells[:diff]
                 logging.info(f"[Rebalance] Cancelaremos {diff} sell-orders y crearemos {diff} buy-orders.")
-
-                # Cancelar las SELL seleccionadas
+                sells_to_cancel = sorted_sells[:diff]
                 for s in sells_to_cancel:
                     try:
                         await self.exchange.cancel_order(s['id'], self.symbol)
@@ -218,10 +200,9 @@ class OrderManager:
                     except Exception as e:
                         logging.error(f"Error cancelando venta {s['id']}: {e}")
 
-                # Establecer precio de referencia para las nuevas compras
                 if len(buy_orders) == 0:
                     logging.warning("[Rebalance] No hay buy_orders para referencia, usando fallback=0.0")
-                    ref_price = 0.0  # O se podría usar un mid_price actual
+                    ref_price = 0.0  # Podrías usar un mid_price
                 else:
                     sorted_buys_asc = sorted(buy_orders, key=lambda o: o['price'])
                     ref_price = sorted_buys_asc[0]['price'] * (1 - self.percentage_spread)
@@ -251,47 +232,39 @@ class OrderManager:
                     logging.error(f"[Rebalance] Error al generar precios buy: {e}")
 
         # --------------------------------------------------------------------
-        # 2) Rebalancear VENTAS: Si hay más BUY que SELL y net_pos lo permite, cancelar algunas BUY y crear SELL
+        # 2) Rebalancear VENTAS: Si hay más BUY que SELL (más de 10% de diferencia) y hay margen (net_pos > num_sells)
         # --------------------------------------------------------------------
         if num_buys > num_sells * 1.1 and net_pos > num_sells:
             logging.info("[Rebalance] Puede que necesitemos más ventas.")
             logging.info(f"net_pos={net_pos}, sells={num_sells}, buy_orders={num_buys}")
             
-            await asyncio.sleep(0.1)  # pequeña pausa
-            
+            await asyncio.sleep(0.1)
             if net_pos == num_sells:
                 logging.info("[Rebalance] net_pos == sells. No hay margen para más ventas.")
             else:
-                diff = num_buys - num_sells
+                raw_diff = num_buys - num_sells
                 capacidad_ventas = net_pos - num_sells
-                if diff > capacidad_ventas:
-                    diff = capacidad_ventas
-                
+                diff = min(raw_diff, capacidad_ventas, max_diff)
                 if diff <= 0:
                     logging.info("[Rebalance] diff <= 0, no hay nada que cancelar ni crear en ventas.")
                 else:
-                    if diff > self.num_orders // 2:
-                        diff = self.num_orders // 2
-
+                    logging.info(f"[Rebalance] Cancelaremos {diff} buy-orders y crearemos {diff} sell-orders.")
                     sorted_buys_asc = sorted(buy_orders, key=lambda o: o['price'])
                     buys_to_cancel = sorted_buys_asc[:diff]
-                    logging.info(f"[Rebalance] Cancelaremos {diff} buy-orders y crearemos {diff} sell-orders.")
-                    
                     for b in buys_to_cancel:
                         try:
                             await self.exchange.cancel_order(b['id'], self.symbol)
                             logging.info(f"Cancelada compra ID={b['id']} precio={b['price']}")
                         except Exception as e:
                             logging.error(f"Error cancelando compra {b['id']}: {e}")
-
-                    # Para crear las ventas, tomar referencia: si hay sells, usar la venta más alta; sino, usar un fallback
-                    sorted_sells_desc = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
-                    if len(sorted_sells_desc) > 0:
+                    
+                    if len(sell_orders) > 0:
+                        sorted_sells_desc = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
                         ref_price = sorted_sells_desc[0]['price'] * (1 + self.percentage_spread)
                     else:
                         logging.warning("[Rebalance] No hay sells para referencia, usando fallback=0.0")
                         ref_price = 0.0
-
+                    
                     try:
                         prices = calculate_order_prices_sell(
                             ref_price,
@@ -305,7 +278,7 @@ class OrderManager:
                                 break
                             amt = format_quantity(
                                 (self.amount * (1 - self.percentage_spread)) / p / self.contract_size,
-                                self.amount_format 
+                                self.amount_format
                             )
                             try:
                                 await self.create_order('sell', amt, p)
@@ -321,15 +294,13 @@ class OrderManager:
         # --------------------------------------------------------------------
         # 3) Paso final: Asegurar que el total de órdenes sea exactamente self.num_orders
         # --------------------------------------------------------------------
-        # Esperar un breve momento para que se reflejen las cancelaciones
         await asyncio.sleep(0.2)
         open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
             faltan = self.num_orders - total_final
-            logging.info(f"[Rebalance] Quedaron {total_final} órdenes abiertas; faltan {faltan} para llegar a {self.num_orders}. Crearemos buys extra.")
+            logging.info(f"[Rebalance] Quedaron {total_final} órdenes; faltan {faltan} para llegar a {self.num_orders}. Crearemos buys extra.")
             
-            # Usamos las compras como fallback (grid alcista)
             buy_orders_final = [o for o in open_orders_final if o['side'] == 'buy']
             if buy_orders_final:
                 sorted_buys_final = sorted(buy_orders_final, key=lambda o: o['price'])
@@ -358,10 +329,9 @@ class OrderManager:
                     count += 1
             except Exception as e:
                 logging.error(f"[Rebalance] Error creando las {faltan} compras extra: {e}")
-        if total_final > self.num_orders:
+        elif total_final > self.num_orders:
             extra = total_final - self.num_orders
             logging.info(f"[Rebalance] Existen {total_final} órdenes; se cancelarán {extra} para ajustar a {self.num_orders}.")
-            # Cancelamos las órdenes que estén más alejadas, por ejemplo
             sorted_orders = sorted(open_orders_final, key=lambda o: o['price'])
             orders_to_cancel = sorted_orders[-extra:]
             for o in orders_to_cancel:
