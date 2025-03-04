@@ -196,7 +196,8 @@ class OrderManager:
             logging.info("[Rebalance] Necesitamos cancelar ventas y poner compras")
             sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
             raw_diff = num_sells - num_buys
-            diff = min(raw_diff, max_diff)
+            raw_differencei = raw_diff / 2
+            diff = min(raw_differencei, max_diff)
             if diff <= 0:
                 logging.info("[Rebalance] diff <= 0, nada que cancelar ni crear en compras.")
             else:
@@ -251,9 +252,10 @@ class OrderManager:
             if net_pos == num_sells:
                 logging.info("[Rebalance] net_pos == sells. No hay margen para más ventas.")
             else:
-                raw_diff = (num_buys - num_sells )/ 2
+                raw_diff = num_sells - num_buys
+                raw_differencei = raw_diff / 2
                 capacidad_ventas = net_pos - num_sells
-                diff = min(raw_diff, capacidad_ventas, max_diff)
+                diff = min(raw_differencei, capacidad_ventas, max_diff)
                 if diff <= 0:
                     logging.info("[Rebalance] diff <= 0, no hay nada que cancelar ni crear en ventas.")
                 else:
