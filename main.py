@@ -9,9 +9,9 @@ CONFIG = {
     'symbols': ['ETH/USDT:USDT'],
     'amount': 10,
     'percentage_spread': 0.00025,
-    'num_orders': 60,
+    'num_orders': 120,
     'bias': 'long',
-    'price_format': 1,
+    'price_format': 2,
     'amount_format': 2,
     'contract_size': 0.1,
 }

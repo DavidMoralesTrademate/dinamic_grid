@@ -178,7 +178,7 @@ class OrderManager:
         logging.info(f"[Rebalance] total_open={total_open}, buy_orders={num_buys}, sell_orders={num_sells}, net_pos={net_pos}")
 
         # Limite máximo de órdenes a modificar en un ciclo: 25% del total
-        max_diff = max(1, self.num_orders // 6)
+        max_diff = max(1, self.num_orders // 5)
 
         # --------------------------------------------------------------------
         # 1) Rebalancear COMPRAS: Si hay más SELL que BUY (más de 10% de diferencia)
