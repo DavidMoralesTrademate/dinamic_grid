@@ -161,15 +161,20 @@ class OrderManager:
             logging.error(f"Error en place_orders: {e}")
 
     def print_stats(self):
-        """
-        Imprime un resumen de contadores cada vez que se llama (en check_orders).
-        """
+        # Net position: compras llenas menos ventas llenas
+        net_pos = self.total_buys_filled - self.total_sells_filled
+        # Volumen total: suma de todas las órdenes (compras + ventas) multiplicado por el tamaño de la orden
+        total_volume = (self.total_buys_filled + self.total_sells_filled) * self.amount
+        # Fee aproximado: se aplica la tasa (0.002% = 0.00002) al volumen total
+        fee_approx = total_volume * 0.00002
+
         print("\n=== Grid Alcista Stats ===")
-        print(f"  Volumen: {self.total_buys_filled + self.total_sells_filled * self.amount}")
-        print(f"  Total de compras: {self.total_buys_filled}")
-        print(f"  Numero de Matchs: {self.total_sells_filled}")
-        print(f"  Match profit: {self.match_profit:.4f}")
-        print(f"  fee Aprox: {self.total_buys_filled + self.total_sells_filled * self.amount * 0.00002}")
+        print(f"  Volumen Total: {total_volume}")
+        print(f"  Total de Compras: {self.total_buys_filled}")
+        print(f"  Número de Matchs (Ventas llenas): {self.total_sells_filled}")
+        print(f"  Net Position: {net_pos}")
+        print(f"  Match Profit: {self.match_profit:.4f}")
+        print(f"  Fee Aproximado: {fee_approx:.4f}")
         print("=== Fin de Stats ===\n")
 
 
