@@ -40,8 +40,8 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = float(config['total_buys_filled'])
-        self.total_sells_filled = float(config['total_sells_filled'])
+        self.total_buys_filled = 0
+        self.total_sells_filled = 0
         self.match_profit = 0.0
 
         
@@ -121,6 +121,9 @@ class OrderManager:
                 logging.warning(f"No se recibió respuesta en create_order: {side} {amount} @ {price}")
         except Exception as e:
             logging.error(f"Error creando orden: {e}")
+
+
+
 
     async def place_orders(self, initial_price: float):
         """
