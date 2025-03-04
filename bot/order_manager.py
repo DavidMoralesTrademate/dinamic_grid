@@ -300,7 +300,7 @@ class OrderManager:
         # --------------------------------------------------------------------
         # 3) Paso final: Asegurar que el total de órdenes sea exactamente self.num_orders
         # --------------------------------------------------------------------
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.02)
         open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
         total_final = len(open_orders_final)
         if total_final < self.num_orders:

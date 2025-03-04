@@ -16,6 +16,8 @@ CONFIG = {
     'price_format': 2,
     'amount_format': 2,
     'contract_size': 0.1,
+    'total_buys_filled': 0,
+    'total_sells_filled': 0,
 }
 
 if __name__ == "__main__":
