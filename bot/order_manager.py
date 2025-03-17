@@ -40,9 +40,9 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = 3002 + 78
-        self.total_sells_filled = 3002
-        self.match_profit = 252.16
+        self.total_buys_filled = 0
+        self.total_sells_filled = 0
+        self.match_profit = 0
 
         
 
@@ -381,3 +381,16 @@ class OrderManager:
             logging.info(f"Datos actualizados en MongoDB, resultado: {result.raw_result}")
         except Exception as e:
             logging.error(f"Error actualizando datos en MongoDB: {e}")
+
+
+
+
+
+
+#DM00014
+#f76999e1-492a-4076-8ec9-d708fc4824e1
+#07531DF9F47BFD06C2FC8333B26150B5
+
+#DM0013
+#2f1cb002-ede2-4083-a049-262281a041d9
+#9D4E9E1882E6B0DF1478598B824C7887
