@@ -13,7 +13,7 @@ CONFIG = {
     'num_orders': 40,
     'bias': 'long',
     'price_format': 2,
-    'amount_format': 2,
+    'amount_format': 4,
     'contract_size': 0.1,
     'total_buys_filled': 0,
     'total_sells_filled': 0,
