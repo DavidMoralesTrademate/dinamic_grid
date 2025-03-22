@@ -2,11 +2,11 @@ from bot_crypto.core import BotMain
 
 CONFIG = {
     'exchange_options': {
-        'apiKey': 'cxakp_ofHZL7daTQnJp93TqurJ3A',
-        'secret': 'Tu2ytzA9Sk1rsUeyUuGrrj', 
+        'apiKey': 'Tu2ytzA9Sk1rsUeyUuGrrj',
+        'secret': 'cxakp_ofHZL7daTQnJp93TqurJ3A', 
     },
     'exchange_name':'Crypto.com',
-    'account':'dm0012', 
+    'account':'Cuenta principal', 
     'symbols': ['BTC/USD:USD'],
     'amount': 10,
     'percentage_spread': 0.0005,
