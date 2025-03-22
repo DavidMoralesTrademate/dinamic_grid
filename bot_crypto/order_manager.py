@@ -139,7 +139,7 @@ class OrderManager:
                 if count >= self.num_orders:
                     break
                 amt = format_quantity(
-                    self.amount / p / self.contract_size,
+                    self.amount / p ,
                     self.amount_format
                 )
                 await self.create_order('buy', amt, p)
@@ -226,7 +226,7 @@ class OrderManager:
                         if count >= diff:
                             break
                         amt = format_quantity(
-                            self.amount / p / self.contract_size,
+                            self.amount / p ,
                             self.amount_format
                         )
                         try:
@@ -284,7 +284,7 @@ class OrderManager:
                             if count >= diff:
                                 break
                             amt = format_quantity(
-                                (self.amount * (1 - self.percentage_spread)) / p / self.contract_size,
+                                (self.amount * (1 - self.percentage_spread)) / p,
                                 self.amount_format
                             )
                             try:
@@ -328,7 +328,7 @@ class OrderManager:
                     if count >= faltan:
                         break
                     amt = format_quantity(
-                        self.amount / p / self.contract_size,
+                        self.amount / p,
                         self.amount_format
                     )
                     await self.create_order('buy', amt, p)
