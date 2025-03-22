@@ -2,7 +2,7 @@ import datetime
 import motor.motor_asyncio
 import asyncio
 import logging
-from bot.helpers import (
+from bot_crypto.helpers import (
     calculate_order_prices_buy,
     calculate_order_prices_sell,
     format_quantity

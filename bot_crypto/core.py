@@ -3,7 +3,7 @@ import ccxt.pro as ccxtpro
 import logging
 import uvloop
 import aiorun
-from bot.order_manager import OrderManager
+from bot_crypto.order_manager import OrderManager
 
 # Configurar logging avanzado
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
