@@ -39,6 +39,7 @@ class OrderManager:
         self.price_format = config.get('price_format')
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
+        self.contracts = config.get('contracts')
 
         self.total_buys_filled = 0
         self.total_sells_filled = 0
@@ -138,11 +139,8 @@ class OrderManager:
             for p in prices:
                 if count >= self.num_orders:
                     break
-                amt = format_quantity(
-                    self.amount / p / self.contract_size,
-                    self.amount_format
-                )
-                await self.create_order('buy', amt, p)
+
+                await self.create_order('buy', self.contracts, p)
                 count += 1
         except Exception as e:
             logging.error(f"Error en place_orders: {e}")
@@ -225,13 +223,10 @@ class OrderManager:
                     for p in prices:
                         if count >= diff:
                             break
-                        amt = format_quantity(
-                            self.amount / p / self.contract_size,
-                            self.amount_format
-                        )
+                        
                         try:
-                            await self.create_order('buy', amt, p)
-                            logging.info(f"Creada compra {amt} @ {p}")
+                            await self.create_order('buy', self.contracts, p)
+                            logging.info(f"Creada compra {self.contracts} @ {p}")
                             count += 1
                         except Exception as e:
                             logging.error(f"Error creando compra en {p}: {e}")
@@ -283,13 +278,10 @@ class OrderManager:
                         for p in prices:
                             if count >= diff:
                                 break
-                            amt = format_quantity(
-                                (self.amount * (1 - self.percentage_spread)) / p / self.contract_size,
-                                self.amount_format
-                            )
+                            
                             try:
-                                await self.create_order('sell', amt, p)
-                                logging.info(f"Creada venta {amt} @ {p}")
+                                await self.create_order('sell', self.contracts, p)
+                                logging.info(f"Creada venta {self.contracts} @ {p}")
                                 count += 1
                             except Exception as e:
                                 logging.error(f"Error creando venta en {p}: {e}")
@@ -327,12 +319,9 @@ class OrderManager:
                 for p in prices:
                     if count >= faltan:
                         break
-                    amt = format_quantity(
-                        self.amount / p / self.contract_size,
-                        self.amount_format
-                    )
-                    await self.create_order('buy', amt, p)
-                    logging.info(f"Creada compra extra {amt} @ {p}")
+                    
+                    await self.create_order('buy', self.contracts, p)
+                    logging.info(f"Creada compra extra {self.contracts} @ {p}")
                     count += 1
             except Exception as e:
                 logging.error(f"[Rebalance] Error creando las {faltan} compras extra: {e}")
