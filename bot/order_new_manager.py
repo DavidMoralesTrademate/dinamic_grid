@@ -170,7 +170,8 @@ class OrderManager:
           2) Si hay demasiadas compras (buys > sells * 1.1) y el net_pos permite más ventas, cancela algunas compras y crea ventas.
           3) Finalmente, se asegura de tener exactamente self.num_orders órdenes abiertas, creando órdenes extra si es necesario.
         """
-        open_orders = await self.exchange.fetch_open_orders(self.symbol)
+        fetchorders = await self.exchange.fetch_open_orders(self.symbol)
+        open_orders = [o for o in fetchorders if o['info'].get('posSide') == 'long']
         net_pos = self.total_buys_filled - self.total_sells_filled
 
         buy_orders = [o for o in open_orders if o['side'] == 'buy']
@@ -294,7 +295,8 @@ class OrderManager:
         # 3) Paso final: Asegurar que el total de órdenes sea exactamente self.num_orders
         # --------------------------------------------------------------------
         await asyncio.sleep(0.02)
-        open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
+        fetch_open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
+        open_orders_final = [o for o in fetch_open_orders_final if o['info'].get('posSide') == 'long']
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
             faltan = self.num_orders - total_final
