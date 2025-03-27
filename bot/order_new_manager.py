@@ -56,6 +56,7 @@ class OrderManager:
             try:
                 self.print_stats()
                 orders = await self.exchange.watch_orders(self.symbol)
+                print(orders)
                 if not orders:
                     continue
                 for o in orders:
