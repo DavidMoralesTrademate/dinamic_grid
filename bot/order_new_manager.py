@@ -56,10 +56,10 @@ class OrderManager:
             try:
                 self.print_stats()
                 orders = await self.exchange.watch_orders(self.symbol)
-                print(orders)
-                if not orders:
+                open_orders = [o for o in orders if o['info'].get('posSide') == 'long']
+                if not open_orders:
                     continue
-                for o in orders:
+                for o in open_orders:
                     await self.process_order(o)
                 reconnect_attempts = 0
             except Exception as e:
