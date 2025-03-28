@@ -11,7 +11,7 @@ CONFIG = {
     'symbols': ['BTC/USDT:USDT'],
     'amount': 1000,
     'contracts' : 0.9,
-    'percentage_spread': 0.005,
+    'percentage_spread': 0.0005,
     'num_orders': 90,
     'bias': 'long',
     'price_format': 2,
