@@ -23,3 +23,8 @@ CONFIG = {
 if __name__ == "__main__":
     bot = BotMain(CONFIG)
     bot.run()
+
+
+
+#9gHZjrdikcNG1AkgsrVwRIyc6Qb9p1uU1qGdTFYIpX71HcDeoKJmfYlDE0IVmzVQ
+#lj5ovMuHhC27eWO6OaSchKz1uJmqREpVwn3T2fRdFvL4fErtAJaipL9mPzLwk4yc
