@@ -9,7 +9,7 @@ CONFIG = {
     'exchange_name':'OKX',
     'account':'dm0015', 
     'symbols': ['BTC/USDT:USDT'],
-    'amount': 400,
+    'amount': 200,
     'percentage_spread': 0.0005,
     'num_orders': 90,
     'bias': 'long',

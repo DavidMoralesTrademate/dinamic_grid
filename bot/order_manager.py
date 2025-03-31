@@ -40,9 +40,9 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = 37118
-        self.total_sells_filled = 36664
-        self.match_profit = 45830.0000
+        self.total_buys_filled = 0
+        self.total_sells_filled = 0
+        self.match_profit = 0
 
         
 
@@ -55,9 +55,10 @@ class OrderManager:
             try:
                 self.print_stats()
                 orders = await self.exchange.watch_orders(self.symbol)
-                if not orders:
+                open_orders = [o for o in orders if o['info'].get('posSide') == 'long']
+                if not open_orders:
                     continue
-                for o in orders:
+                for o in open_orders:
                     await self.process_order(o)
                 reconnect_attempts = 0
             except Exception as e:
@@ -172,7 +173,8 @@ class OrderManager:
           2) Si hay demasiadas compras (buys > sells * 1.1) y el net_pos permite más ventas, cancela algunas compras y crea ventas.
           3) Finalmente, se asegura de tener exactamente self.num_orders órdenes abiertas, creando órdenes extra si es necesario.
         """
-        open_orders = await self.exchange.fetch_open_orders(self.symbol)
+        fetchorders = await self.exchange.fetch_open_orders(self.symbol)
+        open_orders = [o for o in fetchorders if o['info'].get('posSide') == 'long']
         net_pos = self.total_buys_filled - self.total_sells_filled
 
         buy_orders = [o for o in open_orders if o['side'] == 'buy']
@@ -181,7 +183,6 @@ class OrderManager:
         total_open = len(open_orders)
         num_buys = len(buy_orders)
         num_sells = len(sell_orders)
-
         logging.info(f"[Rebalance] total_open={total_open}, buy_orders={num_buys}, sell_orders={num_sells}, net_pos={net_pos}")
 
         # Limite máximo de órdenes a modificar en un ciclo: 25% del total
@@ -302,7 +303,8 @@ class OrderManager:
         # 3) Paso final: Asegurar que el total de órdenes sea exactamente self.num_orders
         # --------------------------------------------------------------------
         await asyncio.sleep(0.02)
-        open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
+        fetch_open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
+        open_orders_final = [o for o in fetch_open_orders_final if o['info'].get('posSide') == 'long']
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
             faltan = self.num_orders - total_final
