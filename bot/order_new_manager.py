@@ -41,9 +41,9 @@ class OrderManager:
         self.contract_size = config.get('contract_size')
         self.contracts = config.get('contracts')
 
-        self.total_buys_filled = 3156
-        self.total_sells_filled = 3130
-        self.match_profit = 1565.0000
+        self.total_buys_filled = 0
+        self.total_sells_filled = 0
+        self.match_profit = 0
 
         
 
