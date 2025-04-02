@@ -49,7 +49,7 @@ class BotMain:
         while True:
             try:
                 if not self.all_ok and self.price > 0:
-                    await self.order_manager.place_orders(self.price)
+                    await self.order_manager.place_orders(85.333)
                     self.all_ok = True
                 
                 resp = await self.exchange.watch_bids_asks([self.symbol])
