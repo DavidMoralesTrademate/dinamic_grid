@@ -3,7 +3,7 @@ import ccxt.pro as ccxtpro
 import logging
 import uvloop
 import aiorun
-from inverse.order_manager import OrderManager
+from inverse.order_manager import OrderManagerBearish
 
 # Configurar logging avanzado
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,7 +39,7 @@ class BotMain:
             'enableRateLimit': False,
         })
         
-        self.order_manager = OrderManager(self.exchange, self.symbol, self.config)
+        self.order_manager = OrderManagerBearish(self.exchange, self.symbol, self.config)
         logging.info("Exchange initialized with given API keys.")
     
     async def check_prices(self):
