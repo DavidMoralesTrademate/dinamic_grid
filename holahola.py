@@ -1,4 +1,4 @@
-from bot.hola import BotMain
+from inverse.core import BotMain
 
 CONFIG = {
     'exchange_options': {
