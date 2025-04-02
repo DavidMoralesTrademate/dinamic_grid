@@ -40,9 +40,9 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = 96895
-        self.total_sells_filled =95784
-        self.match_profit = 5890.8170
+        self.total_buys_filled = 39245
+        self.total_sells_filled =38906
+        self.match_profit = 48632.5000
 
         
 
