@@ -10,7 +10,7 @@ CONFIG = {
     'account':'dm0015', 
     'symbols': ['BTC/USDT:USDT'],
     'amount': 80000,
-    'contracts' : 100,
+    'contracts' : 22.45,
     'percentage_spread': 0.0005,
     'num_orders': 50,
     'bias': 'long',
