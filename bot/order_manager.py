@@ -40,11 +40,11 @@ class OrderManager:
         self.amount_format = config.get('amount_format')
         self.contract_size = config.get('contract_size')
 
-        self.total_buys_filled = 154164 + 1075
+        self.total_buys_filled = 167827 + 1075
 
-        self.total_sells_filled = 154164
+        self.total_sells_filled = 167827
 
-        self.match_profit = 9481.1870
+        self.match_profit = 10321.4615
         
 
     async def check_orders(self):
