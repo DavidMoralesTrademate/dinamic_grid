@@ -39,7 +39,7 @@ class OrderManagerBearish:
             try:
                 self.print_stats()
                 orders = await self.exchange.watch_orders(self.symbol)
-                open_orders = [o for o in orders if o['info'].get('posSide') == 'short']
+                open_orders = [o for o in orders]
                 if not open_orders:
                     continue
                 for o in open_orders:
