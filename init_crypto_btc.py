@@ -17,6 +17,7 @@ CONFIG = {
     'contract_size': 0.0001,
     'total_buys_filled': 0,
     'total_sells_filled': 0,
+    'contracts': 0.0001
 }
 
 if __name__ == "__main__":
