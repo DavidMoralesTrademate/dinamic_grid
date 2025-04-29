@@ -83,14 +83,12 @@ class OrderManagerBearish:
 
     async def create_order(self, side: str, amount: float, price: float):
         try:
-            params = {'posSide': 'short'}
             resp = await self.exchange.create_order(
                 self.symbol,
                 'limit',
                 side,
                 amount,
                 price,
-                params=params
             )
             if resp:
                 oid = resp['id']
@@ -121,7 +119,7 @@ class OrderManagerBearish:
 
     async def rebalance(self):
         fetchorders = await self.exchange.fetch_open_orders(self.symbol)
-        open_orders = [o for o in fetchorders if o['info'].get('posSide') == 'short']
+        open_orders = [o for o in fetchorders]
         net_pos = self.total_sells_filled - self.total_buys_filled
 
         sell_orders = [o for o in open_orders if o['side'] == 'sell']
@@ -162,7 +160,7 @@ class OrderManagerBearish:
                 await self.create_order('buy', self.contracts, p)
 
         await asyncio.sleep(0.02)
-        open_orders_final = [o for o in await self.exchange.fetch_open_orders(self.symbol) if o['info'].get('posSide') == 'short']
+        open_orders_final = [o for o in await self.exchange.fetch_open_orders(self.symbol)]
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
             faltan = self.num_orders - total_final
