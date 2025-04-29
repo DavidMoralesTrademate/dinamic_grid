@@ -14,7 +14,7 @@ CONFIG = {
     'bias': 'short',
     'price_format': 1,
     'amount_format': 1,
-    'contract_size': 0.1,
+    'contract_size': 0.0001,
     'total_buys_filled': 0,
     'total_sells_filled': 0,
 }
