@@ -1,4 +1,4 @@
-from inverse.core import BotMain
+from bot_crypto.core import BotMain
 
 CONFIG = {
     'exchange_options': {
