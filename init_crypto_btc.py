@@ -2,7 +2,7 @@ from inverse.core import BotMain
 
 CONFIG = {
     'exchange_options': {
-        'apiKey': 'ryP5r4NykiMFMgirpDrzz2',
+        'apiKey': 'ryP5r4NykiMFMgirpDrzz22',
         'secret': 'cxakp_vtir5djaq3FxzMka6cV7Ca', 
     },
     'exchange_name':'Crypto.com',
