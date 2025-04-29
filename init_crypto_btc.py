@@ -2,15 +2,15 @@ from inverse.core import BotMain
 
 CONFIG = {
     'exchange_options': {
-        'apiKey': 'QtXnysZH8b3eicH3hcMDmK',
-        'secret': 'cxakp_CMzw3HAi7c1TqqEjnwJD6a', 
+        'apiKey': 'ryP5r4NykiMFMgirpDrzz2',
+        'secret': 'cxakp_vtir5djaq3FxzMka6cV7Ca', 
     },
     'exchange_name':'Crypto.com',
     'account':'Cuenta principal', 
     'symbols': ['BTC/USD:USD'],
     'amount': 10,
     'percentage_spread': 0.05/100,
-    'num_orders': 90,
+    'num_orders': 20,
     'bias': 'short',
     'price_format': 4,
     'amount_format': 4,
