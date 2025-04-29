@@ -108,6 +108,8 @@ class OrderManagerBearish:
                 self.num_orders,
                 self.price_format
             )
+
+            print(prices)
             count = 0
             for p in prices:
                 if count >= self.num_orders:
