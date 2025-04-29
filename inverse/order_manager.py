@@ -112,6 +112,7 @@ class OrderManagerBearish:
             for p in prices:
                 if count >= self.num_orders:
                     break
+                print(self.contracts, p)
                 await self.create_order('sell', self.contracts, p)
                 count += 1
         except Exception as e:
