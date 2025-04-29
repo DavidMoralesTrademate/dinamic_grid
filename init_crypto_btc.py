@@ -2,8 +2,8 @@ from inverse.core import BotMain
 
 CONFIG = {
     'exchange_options': {
-        'apiKey': 'Tu2ytzA9Sk1rsUeyUuGrrj',
-        'secret': 'cxakp_ofHZL7daTQnJp93TqurJ3A', 
+        'apiKey': 'ECyWeeY2f2zNQ6JmMnZm7Z',
+        'secret': 'cxakp_CMzw3HAi7c1TqqEjnwJD6a', 
     },
     'exchange_name':'Crypto.com',
     'account':'Cuenta principal', 
