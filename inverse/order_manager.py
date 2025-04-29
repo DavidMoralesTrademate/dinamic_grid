@@ -83,12 +83,14 @@ class OrderManagerBearish:
 
     async def create_order(self, side: str, amount: float, price: float):
         try:
+            params = {'posSide': 'short'}
             resp = await self.exchange.create_order(
                 self.symbol,
                 'limit',
                 side,
                 amount,
                 price,
+                params=params
             )
             if resp:
                 oid = resp['id']
@@ -106,21 +108,17 @@ class OrderManagerBearish:
                 self.num_orders,
                 self.price_format
             )
-
-            print(prices)
             count = 0
             for p in prices:
                 if count >= self.num_orders:
                     break
-                print(self.contracts, p)
                 await self.create_order('sell', self.contracts, p)
                 count += 1
         except Exception as e:
             logging.error(f"Error en place_orders: {e}")
 
     async def rebalance(self):
-        fetchorders = await self.exchange.fetch_open_orders(self.symbol)
-        open_orders = [o for o in fetchorders]
+        open_orders = await self.exchange.fetch_open_orders(self.symbol)
         net_pos = self.total_sells_filled - self.total_buys_filled
 
         sell_orders = [o for o in open_orders if o['side'] == 'sell']
@@ -142,10 +140,11 @@ class OrderManagerBearish:
                 await self.exchange.cancel_order(b['id'], self.symbol)
                 logging.info(f"Cancelada compra ID={b['id']} precio={b['price']}")
 
-            ref_price = sorted_sells[0]['price'] * (1 + self.percentage_spread) if sell_orders else 0.0
+            sorted_sells = sorted(sell_orders, key=lambda o: o['price'], reverse=True)
+            ref_price = sorted_sells[0]['price'] * (1 + self.percentage_spread) if sorted_sells else 0.0
             prices = calculate_order_prices_sell(ref_price, self.percentage_spread, diff, self.price_format)
             for p in prices:
-                await self.create_order('sell', self.contracts, p)
+                await self.create_order('sell', self.amount, p)
 
         if num_sells > num_buys * 1.1 and net_pos > num_buys:
             logging.info("[Rebalance] Demasiadas ventas, rebalanceando con compras")
@@ -155,22 +154,24 @@ class OrderManagerBearish:
                 await self.exchange.cancel_order(s['id'], self.symbol)
                 logging.info(f"Cancelada venta ID={s['id']} precio={s['price']}")
 
-            ref_price = sorted_buys[0]['price'] * (1 - self.percentage_spread) if buy_orders else 0.0
+            sorted_buys = sorted(buy_orders, key=lambda o: o['price'])
+            ref_price = sorted_buys[0]['price'] * (1 - self.percentage_spread) if sorted_buys else 0.0
             prices = calculate_order_prices_buy(ref_price, self.percentage_spread, diff, self.price_format)
             for p in prices:
-                await self.create_order('buy', self.contracts, p)
+                await self.create_order('buy', self.amount, p)
 
         await asyncio.sleep(0.02)
-        open_orders_final = [o for o in await self.exchange.fetch_open_orders(self.symbol)]
+        open_orders_final = await self.exchange.fetch_open_orders(self.symbol)
         total_final = len(open_orders_final)
         if total_final < self.num_orders:
             faltan = self.num_orders - total_final
             logging.info(f"[Rebalance] Faltan {faltan} órdenes. Agregando ventas")
             sell_orders_final = [o for o in open_orders_final if o['side'] == 'sell']
-            ref_price = sorted(sell_orders_final, key=lambda o: o['price'])[0]['price'] * (1 + self.percentage_spread) if sell_orders_final else 0.0
+            sorted_sells = sorted(sell_orders_final, key=lambda o: o['price'], reverse=True)
+            ref_price = sorted_sells[0]['price'] * (1 + self.percentage_spread) if sorted_sells else 0.0
             prices = calculate_order_prices_sell(ref_price, self.percentage_spread, faltan, self.price_format)
             for p in prices:
-                await self.create_order('sell', self.contracts, p)
+                await self.create_order('sell', self.amount, p)
         elif total_final > self.num_orders:
             extra = total_final - self.num_orders
             logging.info(f"[Rebalance] Hay {extra} órdenes extra. Cancelando")
