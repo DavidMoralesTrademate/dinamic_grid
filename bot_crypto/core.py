@@ -32,9 +32,10 @@ class BotMain:
         if not self.symbol:
             raise ValueError("Symbol must be specified in config.")
         
-        self.exchange = ccxtpro.cryptocom({
+        self.exchange = ccxtpro.okx({
             "apiKey": self.config["exchange_options"]["apiKey"],
             "secret": self.config["exchange_options"]["secret"],
+            "password": self.config["exchange_options"]["password"],
             'enableRateLimit': False,
         })
         
