@@ -12,11 +12,11 @@ CONFIG = {
     'amount': 7500,
     'contracts' : 10 ,
     'percentage_spread': 0.0005,
-    'num_orders': 10,
+    'num_orders': 20,
     'bias': 'long',
     'price_format': 2,
     'amount_format': 2,
-    'contract_size': 0.01,
+    'contract_size': 0.02,
     'total_buys_filled': 0,
     'total_sells_filled': 0,
 }
