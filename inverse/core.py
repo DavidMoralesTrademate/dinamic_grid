@@ -65,7 +65,7 @@ class BotMain:
     async def rebalance_loop(self):
         await asyncio.sleep(10)
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.20)
             await self.order_manager.rebalance()
 
     async def send_data(self):
