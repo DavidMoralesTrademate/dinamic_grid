@@ -108,11 +108,11 @@ class OrderManager:
         """
 
 
-        if price > 104000:
-            logging.info(f"Orden BUY no creada: precio {price} > máximo permitido {self.max_price}")
+        if price > 110000:
+            logging.info(f"Orden BUY no creada: precio {price} > máximo permitido ")
             return
-        if price < 85000:
-            logging.info(f"Orden SELL no creada: precio {price} < mínimo permitido {self.min_price}")
+        if price < 95000:
+            logging.info(f"Orden SELL no creada: precio {price} < mínimo permitido ")
             return
 
 
