@@ -29,8 +29,8 @@ class OrderManagerBearish:
         self.contract_size = config.get('contract_size')
         self.contracts = config.get('contracts')
 
-        self.total_sells_filled = 0
-        self.total_buys_filled = 0
+        self.total_sells_filled = 200
+        self.total_buys_filled = 112
         self.match_profit = 0
 
     async def check_orders(self):
