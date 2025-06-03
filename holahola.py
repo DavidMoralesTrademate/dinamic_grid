@@ -1,9 +1,9 @@
 from inverse.core import BotMain
 
 CONFIG = {
-    'exchange_options': {
-        'apiKey': '658ca219-bd5d-42f1-8f80-ffe1edce2ed1',
-        'secret': 'DDF28BBD70C80C10B69225D991FE1DB5', 
+    'exchange_options':{
+        'apiKey': '43b21016-9cbf-4b01-8e70-30bcbde11481',
+        'secret': 'EFA0EC41AC7C2393579A84A1DBD67D05', 
         'password': 'Bitcoin1.',
     },
     'exchange_name':'OKX',
