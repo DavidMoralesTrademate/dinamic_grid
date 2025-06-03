@@ -15,10 +15,10 @@ CONFIG = {
     'bias': 'short',
     'price_format': 1,
     'amount_format': 1,
-    'contract_size': 0.0073,
+    'contract_size': 0.01,
     'total_buys_filled': 0,
     'total_sells_filled': 0,
-    'contracts': 0.0073
+    'contracts': 0.01
 }
 
 if __name__ == "__main__":
